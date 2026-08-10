@@ -2,9 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { auth, signIn, signOut } from "./auth";
-import { supabase } from "./supabase";
+import { privilegedSupabase } from "./supabase-server";
 import { getBookings } from "./data-service";
 import { redirect } from "next/navigation";
+import {
+  createVerifiedBooking,
+  updateVerifiedBooking,
+} from "./booking-service";
+import { bookingRepository } from "./booking-repository";
 
 export async function updateGuest(formData) {
   const session = await auth();
@@ -18,47 +23,37 @@ export async function updateGuest(formData) {
 
   const updateData = { nationality, countryFlag, nationalID };
 
-  const { data, error } = await supabase
+  const { data, error } = await privilegedSupabase
     .from("guests")
     .update(updateData)
-    .eq("id", session.user.guestId);
+    .eq("id", session.user.guestId)
+    .select("id")
+    .maybeSingle();
 
-  if (error) {
+  if (error || !data) {
     throw new Error("Guest could not be updated");
   }
 
   revalidatePath("/account/profile");
 }
 
-export async function createBooking(bookingData, formData) {
+export async function createBooking(formData) {
   const session = await auth();
   if (!session) throw new Error("You must be logged in");
 
-  // Object.entries(formData.entries);
-
-  const newBooking = {
-    ...bookingData,
+  const booking = await createVerifiedBooking({
+    input: {
+      cabinId: formData.get("cabinId"),
+      startDate: formData.get("startDate"),
+      endDate: formData.get("endDate"),
+      numGuests: formData.get("numGuests"),
+      observations: formData.get("observations"),
+    },
     guestId: session.user.guestId,
-    numGuests: Number(formData.get("numGuests")),
-    observations: formData.get("observations").slice(0, 1000),
-    extrasPrice: 0,
-    totalPrice: bookingData.cabinPrice,
-    isPaid: false,
-    hasBreakfast: false,
-    status: "unconfirmed",
-  };
+    repository: bookingRepository,
+  });
 
-  //console.log(newBooking);
-
-  const { error } = await supabase.from("bookings").insert([newBooking]);
-  // So that the newly created object gets returned!
-
-  if (error) {
-    console.error(error);
-    throw new Error("Booking could not be created");
-  }
-
-  revalidatePath(`/cabins/${bookingData.cabinId}`);
+  revalidatePath(`/cabins/${booking.cabinId}`);
 
   redirect("/cabins/thankyou");
 }
@@ -74,13 +69,13 @@ export async function deleteBooking(bookingId) {
   if (!guestBookingIds.includes(bookingId))
     throw new Error("You are not allowed to delete the booking");
 
-  const { error } = await supabase
+  const { error } = await privilegedSupabase
     .from("bookings")
     .delete()
-    .eq("id", bookingId);
+    .eq("id", bookingId)
+    .eq("guestId", session.user.guestId);
 
   if (error) {
-    // console.error(error);
     throw new Error("Booking could not be deleted");
   }
 
@@ -91,30 +86,15 @@ export async function updateBooking(formData) {
   const session = await auth();
   if (!session) throw new Error("You must be logged in");
 
-  const bookingId = Number(formData.get("bookingId"));
-
-  const guestBookings = await getBookings(session.user.guestId);
-  const guestBookingIds = guestBookings.map((booking) => booking.id);
-
-  if (!guestBookingIds.includes(bookingId))
-    throw new Error("You are not allowed to edit the booking");
-
-  const updatedData = {
-    numGuests: Number(formData.get("numGuests")),
-    observations: formData.get("observations").slice(0, 1000),
-  };
-
-  const { data, error } = await supabase
-    .from("bookings")
-    .update(updatedData)
-    .eq("id", bookingId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error(error);
-    throw new Error("Booking could not be updated");
-  }
+  const { bookingId } = await updateVerifiedBooking({
+    input: {
+      bookingId: formData.get("bookingId"),
+      numGuests: formData.get("numGuests"),
+      observations: formData.get("observations"),
+    },
+    guestId: session.user.guestId,
+    repository: bookingRepository,
+  });
 
   revalidatePath(`/account/reservations/edit/${bookingId}`);
   redirect("/account/reservations");

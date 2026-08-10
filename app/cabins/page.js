@@ -1,4 +1,3 @@
-import Counter from "@/app/_components/Counter";
 import CabinList from "../_components/CabinList";
 import { Suspense } from "react";
 import Spinner from "../_components/Spinner";
@@ -9,13 +8,10 @@ export const metadata = {
   title: "Cabins",
 };
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 export default function Page({ searchParams }) {
-  // CHANGE
-
   const filter = searchParams?.capacity ?? "all";
-  //console.log(filter);
 
   return (
     <div>

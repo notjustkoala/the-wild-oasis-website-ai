@@ -1,9 +1,9 @@
 "use client";
 
-import { differenceInDays } from "date-fns";
 import { useReservation } from "./ReservationContext";
 import { createBooking } from "../_lib/actions";
 import SubmitButton from "./SubmitButton";
+import { getStayQuote, toDateOnly } from "../_lib/booking-domain";
 
 function ReservationForm({ cabin, user }) {
   const { range, resetRange } = useReservation();
@@ -13,18 +13,12 @@ function ReservationForm({ cabin, user }) {
   const startDate = range.from;
   const endDate = range.to;
 
-  const numNights = differenceInDays(endDate, startDate);
-  const cabinPrice = numNights * regularPrice - discount;
-
-  const bookingData = {
+  const { numNights } = getStayQuote({
     startDate,
     endDate,
-    numNights,
-    cabinPrice,
-    cabinId: id,
-  };
-
-  const createBookingWithData = createBooking.bind(null, bookingData);
+    regularPrice,
+    discount,
+  });
 
   return (
     <div className="scale-[1.01] h-full">
@@ -45,12 +39,22 @@ function ReservationForm({ cabin, user }) {
 
       <form
         action={async (formData) => {
-          await createBookingWithData(formData);
+          await createBooking(formData);
           resetRange();
         }}
-        // action={createBookingWithData}
         className="bg-primary-900 py-14 px-16 text-2xl flex gap-14 flex-col h-full"
       >
+        <input type="hidden" name="cabinId" value={id} />
+        <input
+          type="hidden"
+          name="startDate"
+          value={startDate ? toDateOnly(startDate) : ""}
+        />
+        <input
+          type="hidden"
+          name="endDate"
+          value={endDate ? toDateOnly(endDate) : ""}
+        />
         <div className="space-y-2">
           <label htmlFor="numGuests">How many guests?</label>
           <select
@@ -83,7 +87,7 @@ function ReservationForm({ cabin, user }) {
         </div>
 
         <div className="flex justify-end items-center gap-10">
-          {!startDate && !endDate ? (
+          {numNights < 1 ? (
             <p className="text-primary-300 text-lg">Start by selecting dates</p>
           ) : (
             <SubmitButton pendingLabel="Reserving">Reserve now</SubmitButton>

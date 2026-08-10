@@ -1,6 +1,23 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import { customFetch } from "@auth/core";
+import { fetch as undiciFetch, ProxyAgent } from "undici";
+import authConfig from "./auth.config";
 import { createGuest, getGuest } from "./data-service";
+
+const proxyUrl =
+  process.env.HTTPS_PROXY ||
+  process.env.HTTP_PROXY ||
+  process.env.https_proxy ||
+  process.env.http_proxy;
+
+const proxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : null;
+
+function providerFetch(input, init) {
+  if (!proxyAgent) return fetch(input, init);
+
+  return undiciFetch(input, { ...init, dispatcher: proxyAgent });
+}
 
 export const {
   auth,
@@ -8,21 +25,16 @@ export const {
   signOut,
   handlers: { GET, POST },
 } = NextAuth({
-  // 显式信任本地主机，等价于设置 AUTH_TRUST_HOST=true
-  trustHost: true,
-  // 打开调试日志，便于定位 Configuration / fetch 失败原因
-  debug: true,
-  secret: process.env.NEXTAUTH_SECRET,
+  ...authConfig,
   providers: [
     Google({
       clientId: process.env.AUTH_GOOGLE_ID,
       clientSecret: process.env.AUTH_GOOGLE_SECRET,
+      [customFetch]: providerFetch,
     }),
   ],
   callbacks: {
-    authorized({ auth, request }) {
-      return !!auth?.user;
-    },
+    ...authConfig.callbacks,
     async signIn({ user, account, profile }) {
       try {
         const existingGuest = await getGuest(user.email);
@@ -40,8 +52,5 @@ export const {
       session.user.guestId = guest.id;
       return session;
     },
-  },
-  pages: {
-    signIn: "/login",
   },
 });

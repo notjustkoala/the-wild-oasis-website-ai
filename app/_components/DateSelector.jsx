@@ -11,7 +11,7 @@ import {
 import PriceSummary from "./PriceSummary";
 
 function DateSelector({ settings, cabin, bookedDates }) {
-  const { range, setRange, resetRange } = useReservation();
+  const { range, setRange, resetRange, draft } = useReservation();
 
   const { regularPrice, discount } = cabin;
   const quote = getStayQuote({
@@ -34,6 +34,11 @@ function DateSelector({ settings, cabin, bookedDates }) {
 
   return (
     <div className="flex flex-col justify-between">
+      {draft?.cabinId === cabin.id ? (
+        <p className="px-8 pt-5 text-sm text-accent-300" role="status">
+          AI plan applied. Review the dates before reserving.
+        </p>
+      ) : null}
       <DayPicker
         className="py-9 px-24 "
         mode="range"

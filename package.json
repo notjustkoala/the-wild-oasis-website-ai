@@ -9,21 +9,25 @@
     "prod": "next build && next start",
     "lint": "next lint",
     "test": "vitest run",
+    "test:ai": "vitest run tests/ai",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
     "seed:base": "node scripts/generate-base-seed.mjs",
     "seed:demo": "node scripts/generate-demo-data.mjs"
   },
   "dependencies": {
+    "@ai-sdk/google": "4.0.42",
+    "@ai-sdk/react": "4.0.61",
     "@heroicons/react": "^2.2.0",
     "@supabase/supabase-js": "^2.57.4",
+    "ai": "7.0.58",
     "date-fns": "^4.1.0",
     "next": "14.2.32",
     "next-auth": "^5.0.0-beta.29",
     "react": "^18",
     "react-day-picker": "^9.10.0",
     "react-dom": "^18",
-    "undici": "^6.21.3",
+    "undici": "6.28.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

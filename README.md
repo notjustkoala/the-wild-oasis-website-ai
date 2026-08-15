@@ -6,7 +6,7 @@ and should point only to a dedicated development Supabase project.
 
 ## Local setup
 
-Requirements: Node.js 20+ and npm.
+Requirements: Node.js 22+ and npm.
 
 ```bash
 npm install
@@ -20,12 +20,96 @@ Required variables are documented in `.env.example`:
 - `SUPABASE_SECRET_KEY` (server runtime only)
 - `NEXTAUTH_SECRET`
 - `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`
+- `AI_PROVIDER=google` and `GOOGLE_GENERATIVE_AI_API_KEY` for live AI concierge
+  requests (server runtime only)
+- optional `AI_CONCIERGE_MODEL`; it defaults to `gemini-3.6-flash`
 
 `SUPABASE_KEY` is a compatibility fallback for a legacy low-privilege anon
 key. `SUPABASE_SERVICE_ROLE_KEY` is accepted only as a legacy server-only
 fallback for `SUPABASE_SECRET_KEY`. The privileged key must never use a
 `NEXT_PUBLIC_` prefix, enter a Client Component, appear in logs/chat, or be
 committed. Local environment files are ignored by Git.
+
+## AI concierge
+
+The global **Ask AI concierge** launcher streams an AI SDK `ToolLoopAgent`.
+It calls the Gemini Developer API directly by default, using the stable
+`gemini-3.6-flash` model because it supports streaming and function calling and
+is available to the development account used for this project. This does not
+guarantee that 3.6 Flash has free quota for every account. Model availability,
+free-tier quotas, regional availability, and verification requirements can
+change; check the model list and limits shown by Google AI Studio for the
+current account before relying on them.
+On the Free Tier, Google currently states that submitted content may be used to
+improve its products. Do not send secrets or sensitive personal data.
+
+Put the live configuration in
+`D:\working\code\21-the-wild-oasis-website-ai\.env.development.local` (never
+commit this file):
+
+```dotenv
+AI_PROVIDER=google
+GOOGLE_GENERATIVE_AI_API_KEY=replace-with-your-key
+# Optional; this is already the default:
+# AI_CONCIERGE_MODEL=gemini-3.6-flash
+```
+
+If the current account has no free quota for 3.6 Flash, explicitly select a
+model that AI Studio shows as available under that account's Free Tier, for
+example `AI_CONCIERGE_MODEL=gemini-3.5-flash-lite` (lower-cost/high-throughput)
+or `AI_CONCIERGE_MODEL=gemini-3.5-flash`. Always follow the current AI Studio
+model list and quota display rather than assuming a model is universally free.
+
+Do not prefix the key with `NEXT_PUBLIC_`: only the server route may read it.
+Builds and automated tests need no live key. A live request with missing or
+invalid provider configuration returns a recoverable client error without
+exposing the credential or internal error details.
+
+For local development on a restricted network, the server-side Google and
+OAuth transports understand `HTTPS_PROXY` and `HTTP_PROXY` (including their
+lowercase forms). `AI_HTTPS_PROXY` is an optional AI-only override and takes
+precedence. Only valid `http://` or `https://` proxy URLs are used; otherwise
+the server falls back to native fetch. Keep proxy URLs server-only too,
+especially when they contain credentials. A typical local-only example is:
+
+```dotenv
+HTTPS_PROXY=http://127.0.0.1:7890
+HTTP_PROXY=http://127.0.0.1:7890
+```
+
+Restart `npm run dev` after changing environment variables. Vercel deployments
+normally connect directly and do not need these local proxy variables.
+
+Vercel AI Gateway remains an explicit alternative for multi-provider routing
+and future failover. Gateway model IDs must use `provider/model` format:
+
+```dotenv
+AI_PROVIDER=gateway
+AI_GATEWAY_API_KEY=replace-with-your-gateway-key
+AI_CONCIERGE_MODEL=openai/gpt-5.6-terra
+```
+
+`VERCEL_OIDC_TOKEN` can replace `AI_GATEWAY_API_KEY` for Gateway mode. Provider
+selection is isolated in one server-only resolver, so another direct provider
+such as Groq can be added later without changing the concierge UI or tools.
+
+Four read-only tools query current Supabase cabins, settings, and bookings.
+They use `[startDate, endDate)` overlap semantics and application code to
+calculate capacity, nights, discount, and total; the model has no booking
+mutation tool and does not calculate prices.
+
+The server treats chat history from the browser as untrusted display state. It
+enforces bounded request/message/text sizes and rebuilds model input from
+validated user text only; client-provided assistant text, reasoning, sources,
+files, data parts, and tool outputs are never passed back to the agent. Before
+public deployment, add distributed request throttling with Vercel Firewall or a
+persistent store such as Redis. A process-local counter is not sufficient for
+serverless instances and is intentionally not implemented here.
+
+**Adopt plan** only stores `{ cabinId, startDate, endDate, numGuests }` in
+client reservation context and opens the existing form. The guest can edit it
+and must still click **Reserve now**; the trusted server action remains the
+only booking-creation path.
 
 Cabins, settings, and the minimum availability columns use the publishable
 client. Guest profiles, private reservation history, ownership-checked
@@ -43,12 +127,16 @@ so `next build` does not query Supabase.
 npm run lint
 npm run typecheck
 npm run test
+npm run test:ai
 npm run build
 npm run check
 ```
 
 Vitest tests use mocks and pure dependencies; they do not connect to Supabase.
 New `.ts`/`.tsx` modules are checked without migrating stable JavaScript.
+`npm run test:ai` runs 32 deterministic concierge cases plus provider,
+inventory, security, context, and UI checks without calling Gemini, Gateway,
+or Supabase.
 
 ## Trusted reservation flow
 

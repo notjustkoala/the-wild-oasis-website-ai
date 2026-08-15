@@ -6,7 +6,7 @@ import SubmitButton from "./SubmitButton";
 import { getStayQuote, toDateOnly } from "../_lib/booking-domain";
 
 function ReservationForm({ cabin, user }) {
-  const { range, resetRange } = useReservation();
+  const { range, resetRange, draft } = useReservation();
 
   const { maxCapacity, regularPrice, discount, id } = cabin;
 
@@ -58,9 +58,11 @@ function ReservationForm({ cabin, user }) {
         <div className="space-y-2">
           <label htmlFor="numGuests">How many guests?</label>
           <select
+            key={`${id}-${draft?.cabinId ?? "manual"}-${draft?.numGuests ?? "none"}`}
             name="numGuests"
             id="numGuests"
             className="px-5 py-3 bg-primary-200 text-primary-800 w-full shadow-sm rounded-sm"
+            defaultValue={draft?.cabinId === id ? draft.numGuests : ""}
             required
           >
             <option value="" key="">

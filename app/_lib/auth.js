@@ -1,23 +1,11 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { customFetch } from "@auth/core";
-import { fetch as undiciFetch, ProxyAgent } from "undici";
 import authConfig from "./auth.config";
 import { createGuest, getGuest } from "./data-service";
+import { createProxyAwareFetch } from "./server-fetch";
 
-const proxyUrl =
-  process.env.HTTPS_PROXY ||
-  process.env.HTTP_PROXY ||
-  process.env.https_proxy ||
-  process.env.http_proxy;
-
-const proxyAgent = proxyUrl ? new ProxyAgent(proxyUrl) : null;
-
-function providerFetch(input, init) {
-  if (!proxyAgent) return fetch(input, init);
-
-  return undiciFetch(input, { ...init, dispatcher: proxyAgent });
-}
+const providerFetch = createProxyAwareFetch(process.env, {}, false);
 
 export const {
   auth,

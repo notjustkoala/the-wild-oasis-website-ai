@@ -121,6 +121,42 @@ The root layout uses the committed Geist variable font, so production builds
 do not download Google Fonts. Data-backed cabin pages are rendered dynamically,
 so `next build` does not query Supabase.
 
+## Booking risk Briefing
+
+The admin application calls `/api/ai/booking-insight/[bookingId]` with the
+employee's Supabase access token. The route verifies the token and the
+`app_metadata.role=admin` claim, then uses that same user-scoped client so RLS
+remains the database authorization boundary. Configure the exact deployed
+admin origin with `AI_ADMIN_ORIGIN`; local development permits only
+`localhost:5173` and `127.0.0.1:5173`.
+
+Generation is employee-triggered and idempotent. A successful result with the
+same observation hash, model, and prompt version is returned from cache;
+concurrent requests share one atomic pending claim. Failed generation records
+only a safe failure code and never changes or blocks the booking.
+
+Only the normalized booking observation can cross the model boundary, after
+rule-based redaction of labelled guest names, email addresses, phone numbers,
+and long identifiers. If the remaining text still resembles an unlabelled full
+name or contains a sensitive field that cannot be isolated safely, generation
+fails closed and the admin UI directs the employee to manual handling. Booking
+IDs, guest records, national IDs, and database rows are never added to the
+Gemini request. On Google's Free Tier, even safely redacted text may be used for
+product improvement under Google's current terms. Automated tests use
+`MockLanguageModelV4` and never call Gemini or Supabase.
+
+Every GET compares the saved observation hash, model, and prompt version with
+the current values. A mismatch is shown as **stale** and the previous result is
+not rendered as the current Briefing.
+
+`AI_BOOKING_INSIGHT_MODEL` can override the concierge model independently.
+The default uses the same configured Gemini model and server-only credential.
+The migration in `supabase/migrations` must be applied only to the dedicated
+development project before using the admin Briefing UI. The original
+`booking_ai_insights` migration is immutable after application; apply the later
+`optimize_booking_ai_insight_rls_initplan` migration in filename order to make
+the three admin RLS policies evaluate `auth.jwt()` once per statement.
+
 ## Quality commands
 
 ```bash
@@ -134,7 +170,7 @@ npm run check
 
 Vitest tests use mocks and pure dependencies; they do not connect to Supabase.
 New `.ts`/`.tsx` modules are checked without migrating stable JavaScript.
-`npm run test:ai` runs 32 deterministic concierge cases plus provider,
+`npm run test:ai` runs deterministic concierge and booking-insight cases plus provider,
 inventory, security, context, and UI checks without calling Gemini, Gateway,
 or Supabase.
 

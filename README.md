@@ -157,6 +157,40 @@ development project before using the admin Briefing UI. The original
 `optimize_booking_ai_insight_rls_initplan` migration in filename order to make
 the three admin RLS policies evaluate `auth.jwt()` once per statement.
 
+## Operations Copilot
+
+The admin **Operations Copilot** is served by `/api/ai/admin`. It accepts only
+Supabase access tokens for users whose `app_metadata.role` is `admin` or
+`staff`, and the BFF allows only the configured `AI_ADMIN_ORIGIN` (plus the two
+local Vite origins during development). Five fixed tools provide bounded,
+stable JSON results with `sourceIds`: arrivals, booking metrics, cabin
+performance, rule-derived booking risks, and explicitly requested booking
+details. The model never receives guest names, contact details, raw
+observations, or full booking rows.
+
+`getBookingMetrics` follows the existing dashboard's booking reporting basis:
+the date range filters `created_at`, cancelled bookings remain included, and
+dashboard revenue is the sum of `totalPrice` (which already includes
+`extrasPrice`). `extrasPrice` is reported separately as `extrasRevenue` and is
+not added again. The response states these semantics so the model cannot
+silently reinterpret an arrival-date-only metric.
+
+The only write-capable tool drafts an internal note. It creates a pending
+approval and audit event; an employee must approve or reject it through the
+idempotent approval endpoint. Rejection is terminal, and approval updates only
+`bookings.internalNote` inside a security-definer transaction. Staff have read
+access to bookings but no direct booking write policy. The Feature 03 migrations
+have been applied to the dedicated Dev Supabase project (`wild-oasis-dev`); the
+original application's project and database were not modified. The append-only
+`20260825000100_optimize_ai_operations_advisors.sql` migration adds the missing
+foreign-key indexes, normalizes Feature 03 RLS expressions, and preserves the
+constrained approval RPC contract.
+
+For the approval-chain acceptance check, send one explicit booking command in a
+single turn, for example: `Draft an internal note for booking 123: Follow up on
+payment`. The numeric bookingId is preserved for the allow-listed tool while
+the free-form note body remains redacted before it reaches Gemini.
+
 ## Quality commands
 
 ```bash

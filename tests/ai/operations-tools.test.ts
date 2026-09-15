@@ -81,6 +81,10 @@ function operationsRow(id: number, startDate = "2026-09-01T00:00:00Z") {
 }
 
 describe("operations copilot fixed tools", () => {
+  it("registers policy search beside the existing operations tools", () => {
+    const tools = createOperationsTools({ client: { from: vi.fn(), rpc: vi.fn() }, actorId: "actor-1" });
+    expect(Object.keys(tools)).toContain("searchHotelPolicies");
+  });
   it("rejects malformed and overlong date ranges", () => {
     expect(() => assertOperationsDateRange({ from: "2026-02-30", to: "2026-03-01" })).toThrow();
     expect(() => assertOperationsDateRange({ from: "2026-01-01", to: "2027-01-02" }, 31)).toThrow(/31/);

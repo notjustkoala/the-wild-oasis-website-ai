@@ -1,0 +1,25 @@
+{
+  "embedding": {
+    "model": "gemini-embedding-2",
+    "dimensions": 768,
+    "documentInstructionVersion": "policy-document-v1",
+    "queryInstructionVersion": "policy-query-v1"
+  },
+  "chunking": {
+    "version": "heading-paragraph-v1",
+    "maxCharacters": 900,
+    "overlapCharacters": 120
+  },
+  "retrieval": {
+    "matchCount": 5,
+    "candidateCount": 30,
+    "minimumSemanticSimilarity": 0.55,
+    "maximumSemanticDistanceFromBest": 0.04,
+    "rrfK": 50,
+    "fullTextWeight": 1,
+    "semanticWeight": 1,
+    "maximumQuestionCharacters": 500,
+    "maximumExcerptCharacters": 420,
+    "maximumContextCharacters": 2400
+  }
+}

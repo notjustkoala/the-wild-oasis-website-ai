@@ -37,7 +37,7 @@ describe("operations approval boundary", () => {
   });
 
   it("migration exposes only the internal note as the approval write", () => {
-    const source = readFileSync(resolve(process.cwd(), "supabase/migrations/20260823000100_ai_operations_copilot.sql"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "supabase/migrations/20260824162537_ai_operations_copilot.sql"), "utf8");
     const bookingUpdate = source.match(/update public\.bookings[\s\S]*?where id = v_approval\.booking_id;/i)?.[0] ?? "";
     expect(bookingUpdate).toMatch(/set \"internalNote\"/i);
     expect(bookingUpdate).not.toMatch(/set\s+\"?(?:status|isPaid|totalPrice|startDate|endDate|cabinId|guestId)\"?\s*=/i);
@@ -49,7 +49,7 @@ describe("operations approval boundary", () => {
   });
 
   it("maps approval actions to valid audit events in the append-only fix", () => {
-    const source = readFileSync(resolve(process.cwd(), "supabase/migrations/20260826000100_fix_booking_ai_reject_audit_event.sql"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "supabase/migrations/20260826151933_fix_booking_ai_reject_audit_event.sql"), "utf8");
     expect(source).toMatch(/create or replace function public\.decide_booking_internal_note/i);
     expect(source).toMatch(/when 'approve' then 'approved'/i);
     expect(source).toMatch(/when 'reject' then 'rejected'/i);

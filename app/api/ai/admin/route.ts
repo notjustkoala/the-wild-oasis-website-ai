@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       client: authorization.client,
       actorId: authorization.user.id,
       referenceDate,
+      currentPolicyQuestion: parsed.currentPolicyQuestion,
     });
     if (request.headers.get("accept")?.includes("application/json")) {
       const modelMessages = await convertToModelMessages(parsed.uiMessages, {

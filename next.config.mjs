@@ -4,6 +4,7 @@ const supabaseHostname = process.env.SUPABASE_URL
   : "localhost";
 
 const nextConfig = {
+  distDir: process.env.NEXT_BUILD_OUTPUT_DIR || ".next",
   images: {
     remotePatterns: [
       {

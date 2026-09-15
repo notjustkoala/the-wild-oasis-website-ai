@@ -4,6 +4,8 @@ import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 
 import { createOperationsApproval } from "@/app/_ai/operations-approval";
+import type { PolicyRpcClient } from "@/app/_ai/policies/policy-repository";
+import { createPolicySearchTool } from "@/app/_ai/tools/policy-search";
 import {
   assertOperationsDateRange,
   bookingIdListSchema,
@@ -21,7 +23,7 @@ import {
 } from "@/app/_ai/operations-types";
 
 type OperationsToolDependencies = {
-  client: { from: (table: string) => unknown };
+  client: { from: (table: string) => unknown; rpc?: PolicyRpcClient["rpc"] };
   actorId: string;
   now?: () => Date;
 };
@@ -94,6 +96,10 @@ function rangeFacts(range: { from: string; to: string }) {
 }
 
 export function createOperationsTools({ client, actorId, now = () => new Date() }: OperationsToolDependencies) {
+  const searchHotelPolicies = createPolicySearchTool({
+    client: client as PolicyRpcClient,
+    allowedScopes: ["public", "staff"],
+  });
   const getArrivals = tool({
     description: "List non-cancelled arrivals in a bounded date range; historical ranges are allowed for reporting.",
     inputSchema: operationsDateRangeSchema,
@@ -298,5 +304,5 @@ export function createOperationsTools({ client, actorId, now = () => new Date() 
     },
   });
 
-  return { getArrivals, getBookingMetrics, getCabinPerformance, getBookingRisks, getBookingDetails, addBookingInternalNote } satisfies ToolSet;
+  return { getArrivals, getBookingMetrics, getCabinPerformance, getBookingRisks, getBookingDetails, addBookingInternalNote, searchHotelPolicies } satisfies ToolSet;
 }

@@ -3,6 +3,9 @@ import "server-only";
 import type { UIMessage } from "ai";
 import { z } from "zod";
 
+import policyConfig from "@/policy-rag.config.json";
+import { hasPolicyIntent } from "@/app/_ai/policies/policy-query-privacy";
+
 export const MAX_CONCIERGE_MESSAGES = 40;
 export const MAX_CONCIERGE_BODY_BYTES = 32_000;
 export const MAX_CONCIERGE_MESSAGE_BYTES = 24_000;
@@ -222,4 +225,40 @@ export function validateConciergeRequestBody(
   }
 
   return { ok: true, uiMessages };
+}
+
+/**
+ * Policy questions are self-contained turns. Keep earlier validated guest text
+ * available for ordinary cabin-search follow-ups, but never let an old policy
+ * topic become part of the current retrieval query or answer context.
+ */
+export function scopeConciergePolicyTurn(
+  uiMessages: CanonicalConciergeUIMessage[]
+) {
+  const current = uiMessages.at(-1);
+  if (!current) {
+    return {
+      uiMessages,
+      currentPolicyQuestion: undefined,
+    };
+  }
+
+  const currentQuestion = current.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim()
+    .slice(0, policyConfig.retrieval.maximumQuestionCharacters);
+
+  if (!hasPolicyIntent(currentQuestion)) {
+    return {
+      uiMessages,
+      currentPolicyQuestion: undefined,
+    };
+  }
+
+  return {
+    uiMessages: [current],
+    currentPolicyQuestion: currentQuestion,
+  };
 }

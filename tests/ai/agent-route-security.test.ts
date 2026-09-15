@@ -12,6 +12,7 @@ import {
   MAX_CONCIERGE_TEXT_PART_CHARS,
   MAX_CONCIERGE_USER_MESSAGE_CHARS,
   readBoundedConciergeJson,
+  scopeConciergePolicyTurn,
   validateConciergeRequestBody,
 } from "@/app/_ai/concierge-request";
 import { POST } from "@/app/api/ai/concierge/route";
@@ -36,7 +37,7 @@ describe("concierge agent and route safety", () => {
     } as RequestInit & { duplex: "half" });
   }
 
-  it("keeps the four production tools on an injected agent", () => {
+  it("keeps the five production tools on an injected agent", () => {
     const injectedModel = {
       specificationVersion: "v4",
       provider: "test",
@@ -51,6 +52,7 @@ describe("concierge agent and route safety", () => {
       "getCabinDetails",
       "getHotelPolicy",
       "searchAvailableCabins",
+      "searchHotelPolicies",
     ]);
   });
 
@@ -370,12 +372,41 @@ describe("concierge agent and route safety", () => {
       ],
     });
 
+    if (!regenerate.ok) throw new Error("Expected a valid request.");
+    expect(scopeConciergePolicyTurn(regenerate.uiMessages)).toEqual({
+      uiMessages: regenerate.uiMessages,
+      currentPolicyQuestion: undefined,
+    });
+
     const routeSource = readFileSync(
       join(process.cwd(), "app/api/ai/concierge/route.ts"),
       "utf8"
     );
-    expect(routeSource).toMatch(/uiMessages:\s*validated\.uiMessages/);
+    expect(routeSource).toMatch(/uiMessages:\s*turn\.uiMessages/);
+    expect(routeSource).toMatch(
+      /createConciergeAgent\(\{\s*currentPolicyQuestion:\s*turn\.currentPolicyQuestion/s
+    );
     expect(routeSource).not.toMatch(/uiMessages:\s*(?:body|validated\.messages)/);
+  });
+
+  it("isolates a current policy question from earlier guest topics", () => {
+    const validated = validateConciergeRequestBody({
+      messages: [
+        { role: "user", parts: [{ type: "text", text: "可以带25公斤的狗吗？" }] },
+        { role: "assistant", parts: [{ type: "text", text: "旧回答" }] },
+        { role: "user", parts: [{ type: "text", text: "入住前 3 天取消如何收费？" }] },
+        { role: "assistant", parts: [{ type: "text", text: "旧回答" }] },
+        { role: "user", parts: [{ type: "text", text: "几点可以入住，几点退房？" }] },
+      ],
+    });
+    if (!validated.ok) throw new Error("Expected a valid request.");
+
+    const turn = scopeConciergePolicyTurn(validated.uiMessages);
+    expect(turn).toEqual({
+      uiMessages: [validated.uiMessages[2]],
+      currentPolicyQuestion: "几点可以入住，几点退房？",
+    });
+    expect(JSON.stringify(turn)).not.toMatch(/25公斤|取消/);
   });
 
   it("guards secrets, price authority and booking mutation boundaries", () => {

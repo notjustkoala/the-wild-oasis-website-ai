@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { PolicySearchResult } from "@/app/_ai/policies/policy-types";
+
 export const operationsDateRangeSchema = z
   .object({
     from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -95,6 +97,7 @@ export type OperationsToolResult =
     })
   | (OperationsToolResultBase & { kind: "booking-risks"; risks: BookingSummary[] })
   | (OperationsToolResultBase & { kind: "booking-details"; bookings: BookingSummary[] })
+  | PolicySearchResult
   | ApprovalProposal;
 
 export type ApprovalProposal = {

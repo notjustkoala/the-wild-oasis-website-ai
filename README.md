@@ -191,6 +191,44 @@ single turn, for example: `Draft an internal note for booking 123: Follow up on
 payment`. The numeric bookingId is preserved for the allow-listed tool while
 the free-form note body remains redacted before it reaches Gemini.
 
+## Policy corpus verification
+
+The versioned policy corpus includes public guest policies and a staff-only
+exception-handling SOP. Run these commands from a trusted server environment;
+the ingestion and access checks require the server-only Supabase secret and must
+never run in browser code.
+
+```bash
+npm run policies:check
+npm run policies:ingest -- --dry-run
+npm run policies:ingest -- --apply
+npm run policies:verify-access
+```
+
+The access check first confirms that the staff document and its chunks exist with
+the server-only identity. It then repeats table reads and the policy-search RPC
+with the concierge's publishable anonymous identity, and fails if any staff row
+or RPC match is visible. It prints counts only and does not print policy contents
+or credentials.
+
+Feature04 final review and dated evidence are in
+[`tests/ai/policy-rag-closeout.md`](tests/ai/policy-rag-closeout.md).
+The opt-in live regression is separate from `npm test`:
+
+```bash
+npx vitest run --config tests/policy-live.config.mjs
+```
+
+Only run it with authorization for the linked development project. It creates
+three temporary Auth users, checks signed-in RLS/BFF access, then signs out and
+deletes the users. It calls the configured Gemini model with demonstration policy
+questions and one changed public embedding input; it never applies that edited
+policy. Operations business-table access and non-policy RPCs are disabled in the
+answer regression. A counts/answers-only report goes to the ignored
+`.next/feature04-evidence/live-closeout.json`; cleanup is asserted explicitly.
+The rollback-only database version test is
+[`supabase/tests/policy-version-closeout.sql`](supabase/tests/policy-version-closeout.sql).
+
 ## Quality commands
 
 ```bash

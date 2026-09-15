@@ -16,10 +16,44 @@ import type { CabinRecommendation } from "@/app/_ai/schemas/concierge";
 import { useReservation } from "@/app/_components/ReservationContext";
 import CabinComparison from "./CabinComparison";
 import CabinRecommendationCard from "./CabinRecommendationCard";
+import PolicyCitations from "./PolicyCitations";
 import ToolStatus from "./ToolStatus";
 
-const conciergeTransport = new DefaultChatTransport({
+const MAX_CONCIERGE_CLIENT_BODY_BYTES = 24_000;
+
+export function prepareConciergeRequestMessages(
+  messages: ConciergeAgentUIMessage[]
+) {
+  const sanitized = messages.flatMap((message) => {
+    if (message.role !== "user") return [];
+    const parts = message.parts.flatMap((part) =>
+      part.type === "text" ? [{ type: "text" as const, text: part.text }] : []
+    );
+    return parts.length
+      ? [{ id: message.id, role: "user" as const, parts }]
+      : [];
+  });
+
+  const selected: typeof sanitized = [];
+  const encoder = new TextEncoder();
+  for (let index = sanitized.length - 1; index >= 0; index -= 1) {
+    const candidate = [sanitized[index], ...selected];
+    if (
+      encoder.encode(JSON.stringify({ messages: candidate })).byteLength >
+      MAX_CONCIERGE_CLIENT_BODY_BYTES
+    ) {
+      break;
+    }
+    selected.unshift(sanitized[index]);
+  }
+  return selected;
+}
+
+const conciergeTransport = new DefaultChatTransport<ConciergeAgentUIMessage>({
   api: "/api/ai/concierge",
+  prepareSendMessagesRequest: ({ messages }) => ({
+    body: { messages: prepareConciergeRequestMessages(messages) },
+  }),
 });
 
 const suggestions = [
@@ -29,6 +63,7 @@ const suggestions = [
 
 const focusableSelector = [
   "a[href]",
+  "summary",
   "button:not([disabled]):not([tabindex='-1'])",
   "textarea:not([disabled])",
   "input:not([disabled])",
@@ -379,6 +414,23 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                             <ToolStatus
                               key={part.toolCallId}
                               label="Hotel policy"
+                              state={part.state}
+                              errorText={part.state === "output-error" ? part.errorText : undefined}
+                            />
+                          );
+                        case "tool-searchHotelPolicies":
+                          if (part.state === "output-available") {
+                            return (
+                              <div key={part.toolCallId} className="space-y-3">
+                                <ToolStatus label="Hotel policies" state={part.state} />
+                                <PolicyCitations result={part.output} />
+                              </div>
+                            );
+                          }
+                          return (
+                            <ToolStatus
+                              key={part.toolCallId}
+                              label="Hotel policies"
                               state={part.state}
                               errorText={part.state === "output-error" ? part.errorText : undefined}
                             />

@@ -10,6 +10,7 @@ import type {
   SearchAvailableCabinsResult,
 } from "@/app/_ai/schemas/concierge";
 import ConciergePanel, {
+  prepareConciergeRequestMessages,
   type ConciergeChatAdapter,
 } from "@/app/_components/concierge/ConciergePanel";
 
@@ -116,6 +117,62 @@ describe("ConciergePanel production UI states", () => {
   beforeEach(() => {
     mocks.adoptDraft.mockReset();
     mocks.push.mockReset();
+  });
+
+  it("omits assistant tool payloads and provider metadata from follow-up requests", () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "早餐多少钱？" }],
+      },
+      {
+        id: "assistant-1",
+        role: "assistant",
+        metadata: { provider: "x".repeat(40_000) },
+        parts: [
+          {
+            type: "tool-searchHotelPolicies",
+            toolCallId: "policy-1",
+            state: "output-available",
+            input: { question: "早餐多少钱？" },
+            output: {
+              kind: "policy-search",
+              status: "grounded",
+              answerContext: "x".repeat(40_000),
+              citations: [],
+              truncated: false,
+            },
+            providerMetadata: {
+              google: { thoughtSignature: "x".repeat(40_000) },
+            },
+          },
+        ],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        parts: [{ type: "text", text: "提交预订时会自动扣款吗？" }],
+      },
+    ] as ConciergeAgentUIMessage[];
+
+    const prepared = prepareConciergeRequestMessages(messages);
+
+    expect(prepared).toEqual([
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "早餐多少钱？" }],
+      },
+      {
+        id: "user-2",
+        role: "user",
+        parts: [{ type: "text", text: "提交预订时会自动扣款吗？" }],
+      },
+    ]);
+    expect(
+      new TextEncoder().encode(JSON.stringify({ messages: prepared })).byteLength
+    ).toBeLessThan(32_000);
   });
 
   it("keeps the global launcher pointer-accessible above the home background", () => {
@@ -324,5 +381,39 @@ describe("ConciergePanel production UI states", () => {
     );
     expect(adapter.regenerate).toHaveBeenCalledTimes(1);
     expect(adapter.clearError).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders policy citations from the typed policy tool part", async () => {
+    const user = userEvent.setup();
+    render(<ConciergePanel chatAdapter={createAdapter({
+      messages: [assistantMessage([{
+        type: "tool-searchHotelPolicies",
+        toolCallId: "policy-1",
+        state: "output-available",
+        input: { question: "What is the pet policy?" },
+        output: {
+          kind: "policy-search",
+          status: "grounded",
+          answerContext: "Trusted context",
+          citations: [
+            { documentId: "pet-policy", title: "Pet policy", section: "Eligible pets and limits", version: 1, effectiveDate: "2026-08-30", excerpt: "One cat or dog up to 20 kg.", scope: "public" },
+            { documentId: "cancellation-refund", title: "Cancellation policy", section: "Refunds", version: 1, effectiveDate: "2026-08-30", excerpt: "Refunds return to the original payment method.", scope: "public" },
+          ],
+          truncated: false,
+        },
+      }])],
+    })} />);
+    await openPanel(user);
+    expect(screen.getByText(/Pet policy · Eligible pets and limits/)).toBeVisible();
+    expect(screen.getAllByText(/Version 1 · Effective 2026-08-30/)).toHaveLength(2);
+    const first = screen.getByText(/Pet policy · Eligible pets and limits/).closest("summary");
+    const second = screen.getByText(/Cancellation policy · Refunds/).closest("summary");
+    first?.focus();
+    await interact(() => user.tab());
+    expect(second).toHaveFocus();
+    await interact(() => user.tab({ shift: true }));
+    expect(first).toHaveFocus();
+    if (first) await interact(() => user.click(first));
+    expect(screen.getByText("One cat or dog up to 20 kg.")).toBeVisible();
   });
 });

@@ -3,6 +3,7 @@ import { createAgentUIStreamResponse } from "ai";
 import { createConciergeAgent } from "@/app/_ai/agents/concierge-agent";
 import {
   readBoundedConciergeJson,
+  scopeConciergePolicyTurn,
   validateConciergeRequestBody,
 } from "@/app/_ai/concierge-request";
 import {
@@ -40,10 +41,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const agent = createConciergeAgent();
+    const turn = scopeConciergePolicyTurn(validated.uiMessages);
+    const agent = createConciergeAgent({
+      currentPolicyQuestion: turn.currentPolicyQuestion,
+    });
     return await createAgentUIStreamResponse({
       agent,
-      uiMessages: validated.uiMessages,
+      uiMessages: turn.uiMessages,
       abortSignal: request.signal,
       timeout: CONCIERGE_TIMEOUT,
       experimental_transform: createConciergeAbortRecoveryTransform(

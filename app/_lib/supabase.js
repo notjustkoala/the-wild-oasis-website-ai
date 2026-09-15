@@ -23,4 +23,7 @@ export const supabase = {
   from(...args) {
     return getClient().from(...args);
   },
+  rpc(...args) {
+    return getClient().rpc(...args);
+  },
 };

@@ -146,7 +146,7 @@ describe("database bootstrap migration", () => {
     const migration = await readFile(
       resolve(
         process.cwd(),
-        "supabase/migrations/20260805162245_dev_database_bootstrap.sql"
+        "supabase/migrations/20260806143548_dev_database_bootstrap.sql"
       ),
       "utf8"
     );
@@ -166,7 +166,7 @@ describe("database bootstrap migration", () => {
     const migration = await readFile(
       resolve(
         process.cwd(),
-        "supabase/migrations/20260806144254_optimize_admin_rls_initplan.sql"
+        "supabase/migrations/20260806145024_optimize_admin_rls_initplan.sql"
       ),
       "utf8"
     );

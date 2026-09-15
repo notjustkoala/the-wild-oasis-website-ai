@@ -1,6 +1,8 @@
 import "server-only";
 
 import { readBoundedConciergeJson, validateConciergeRequestBody } from "@/app/_ai/concierge-request";
+import { hasPolicyIntent, redactChinesePolicyIdentities } from "@/app/_ai/policies/policy-query-privacy";
+import { POLICY_EXPLANATION_SUFFIX } from "@/app/_ai/policies/policy-query-controls";
 import { addRelativeOperationsDateHint } from "@/app/_ai/operations-types";
 
 export const MAX_OPERATIONS_BODY_BYTES = 40_000;
@@ -56,12 +58,32 @@ const operationalCjkLookupTerms = new Set([
   "离店", "高风险", "有风险", "所有", "本周", "下周", "本月", "上月", "收入", "统计", "收入统计",
 ]);
 const SAFE_BOOKING_LOOKUP_FALLBACK = "Booking lookup requires a numeric bookingId; guest names are not sent to the AI.";
+
+function removePolicyOverridePreamble(text: string) {
+  const overridePrefix =
+    /^\s*(?:ignore\s+(?:all\s+)?(?:previous\s+)?(?:rules?|instructions?)|忽略(?:所有|全部)?(?:规则|指令))\s*[,，;；:]?\s*(?:(?:and\s+)?then\s+|and\s+|然后|并且|再)?/iu;
+  if (!overridePrefix.test(text)) return text;
+
+  return text
+    .replace(overridePrefix, "")
+    .replace(
+      /^\s*(?:show|display|reveal|provide|print|展示|显示|提供|查看|读取)\s*(?:the\s+)?/iu,
+      "",
+    )
+    .replace(/\s*(?:全文|完整内容)\s*$/u, "")
+    .replace(/\s*\b(?:(?:in\s+)?full|entire|complete)(?:\s+(?:text|document|content))?\s*$/iu, "")
+    .trim();
+}
 // Validation consumes composable, known-safe grammar categories: operational
 // intents/filters, booking nouns, bounded time phrases, and allow-listed
 // actions/connectors. Anything left that is a Unicode letter is ambiguous and
 // therefore never reaches the model. Date units are consumed only as complete
 // phrases, so safe-word collisions such as "All Day booking" fail closed.
 const safeOperationsSyntax = [
+  POLICY_EXPLANATION_SUFFIX,
+  // Accept a bounded policy lead-time phrase as a whole, never arbitrary
+  // standalone digits or a suffix sliced from a longer identifier.
+  /提前\s*(?:0|[1-9]\d{0,2})\s*(?:小时|分钟)/gu,
   /\[redacted\]/giu,
   /__(?:BOOKING_ID|OPERATIONS_DATE|OPERATIONS_RELATIVE_DATE)_\d+__/gu,
   /\bbooking\s*id\b/giu,
@@ -73,6 +95,7 @@ const safeOperationsSyntax = [
   /\bhow\s+many\b/giu,
   /\b(?:is|are)\s+there\b/giu,
   /\b(?:metrics?|revenue|payments?|status|details?|counts?|summary|reports?|risks?|arrivals?|departures?|cabins?|guests?|customers?|notes?|approvals?)\b/giu,
+  /\b(?:polic(?:y|ies)|rules?|sops?|procedures?|exceptions?|waivers?|refunds?|fees?|charges?|breakfast|dietary|accessibility|pets?|lifeguards?|pools?)\b/giu,
   /\b(?:operational|unpaid|paid|upcoming|active|current|past|pending|cancelled|canceled|unconfirmed|risky|all|total|recent|checked|attention|internal|usd)\b/giu,
   /\b(?:please|show|find|open|lookup|locate|search|retrieve|list|check|get|give|add|create|write|draft|approve|reject)\b/giu,
   /\b(?:who|what|which|how|is|are|do|does|need|needs|arrive|arriving|depart|departing)\b/giu,
@@ -81,7 +104,11 @@ const safeOperationsSyntax = [
   /(?:舱房表现|收入统计|特殊需求|特殊要求|高风险|有风险|未付款|已付款|已取消|取消|到店|离店|所有|指标|统计|收入|付款|状态|详情|汇总|总计|风险|预订|订单|舱房|宾客|客户|备注|审批|运营|注意)/gu,
   /(?:添加|创建|写入|草拟|批准|拒绝|帮我查|查询|查找|查看|显示|打开|定位|搜索|请查|列出|获取|查)/gu,
   /(?:姓名|名字|邮箱|邮件|电话|手机号|观察|留言|内部)/gu,
-  /(?:有哪些|哪些|什么|是否|有|需要|的|从|至|到|和|与|以及|且|请|吗)/gu,
+  /(?:客人|想知道|要求|免除|临时|严重|流程|提前|申请|支持)/gu,
+  /(?:酒店|政策|规定|规则|员工|异常|处理|例外|豁免|减免|退款|费用|收费|扣款|早餐|饮食|过敏|无障碍|宠物|泳池|救生员|允许|免费|可靠|依据)/gu,
+  /(?:我|你|他|她|对|不能|可以|能否|如何|为什么)/gu,
+  /(?:有哪些|哪些|什么|是否|有|是|需要|的|从|至|到|和|与|以及|且|请|吗)/gu,
+  /(?:费|应)/gu,
 ];
 
 function isOperationalLatinCandidate(candidate: string) {
@@ -159,6 +186,8 @@ export function sanitizeOperationsUserText(text: string) {
     return SAFE_BOOKING_LOOKUP_FALLBACK;
   }
 
+  const policyNormalized = removePolicyOverridePreamble(text);
+
   const bookingIdTokens: string[] = [];
   const dateTokens: string[] = [];
   const relativeDateTokens: string[] = [];
@@ -194,7 +223,7 @@ export function sanitizeOperationsUserText(text: string) {
   );
 
   const noteRedacted = redactNoteCommand(
-    redactNoteCommand(text, freeformNoteCommandPattern),
+    redactNoteCommand(policyNormalized, freeformNoteCommandPattern),
     cjkNoteCommandPattern
   );
   const tokenized = noteRedacted
@@ -233,7 +262,10 @@ export function sanitizeOperationsUserText(text: string) {
     .replace(russianNameContextPattern, "$1[redacted]")
     .replace(englishPossessiveNamePattern, "[redacted]");
 
-  const bounded = enforceOperationsTextBoundary(sanitized);
+  const policyIdentityRedacted = hasPolicyIntent(sanitized)
+    ? redactChinesePolicyIdentities(sanitized)
+    : sanitized;
+  const bounded = enforceOperationsTextBoundary(policyIdentityRedacted);
   if (bounded === SAFE_BOOKING_LOOKUP_FALLBACK) return bounded;
 
   const restored = bounded
@@ -255,15 +287,29 @@ export async function readOperationsRequest(request: Request, referenceDate = ne
   if (!parsed.ok) return parsed;
   const validated = validateConciergeRequestBody(parsed.body);
   if (!validated.ok) return { ok: false as const, status: 400 as const, message: validated.message };
+  const uiMessages = validated.uiMessages.map((message) => ({
+    ...message,
+    parts: message.parts.map((part) =>
+      part.type === "text"
+        ? { ...part, text: addBoundedOperationsDateHint(sanitizeOperationsUserText(part.text), referenceDate, part.text) }
+        : part
+    ),
+  }));
+  const currentUserMessage = [...uiMessages]
+    .reverse()
+    .find((message) => message.role === "user");
+  const currentUserText = currentUserMessage?.parts
+    .filter((part): part is typeof part & { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+
   return {
     ok: true as const,
-    uiMessages: validated.uiMessages.map((message) => ({
-        ...message,
-        parts: message.parts.map((part) =>
-          part.type === "text"
-          ? { ...part, text: addBoundedOperationsDateHint(sanitizeOperationsUserText(part.text), referenceDate, part.text) }
-          : part
-        ),
-    })),
+    uiMessages,
+    currentPolicyQuestion:
+      currentUserText && hasPolicyIntent(currentUserText)
+        ? currentUserText
+        : undefined,
   };
 }

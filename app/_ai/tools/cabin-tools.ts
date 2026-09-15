@@ -413,8 +413,7 @@ export function createConciergeInventoryService(
         facts: [
           `Stays must be ${settings.minBookingLength}-${settings.maxBookingLength} nights.`,
           `A booking can include at most ${settings.maxGuestsPerBooking} guests, subject to cabin capacity.`,
-          `Breakfast is $${settings.breakfastPrice} per guest per day. Dietary requests require staff confirmation.`,
-          "Payment is collected on arrival.",
+          `Breakfast is $${settings.breakfastPrice} per guest per day.`,
         ],
         sourceIds: [`settings:${settings.id}`],
       };
@@ -446,7 +445,7 @@ export function createCabinTools(
       execute: (input) => service.compareCabins(input),
     }),
     getHotelPolicy: tool({
-      description: "Load current booking limits, breakfast price, and hotel policy facts.",
+      description: "Load only live stay-length limits, guest limits, and the current breakfast price.",
       inputSchema: hotelPolicyInputSchema,
       execute: () => service.getHotelPolicy(),
     }),

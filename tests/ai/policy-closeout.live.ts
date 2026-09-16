@@ -6,7 +6,9 @@ import { createOperationsAgent } from "@/app/_ai/agents/operations-agent";
 import { createConciergeAgent } from "@/app/_ai/agents/concierge-agent";
 import { authorizeOperationsStaff } from "@/app/_ai/operations-auth";
 import { readOperationsRequest } from "@/app/_ai/operations-request";
-import { createPolicySearchTool } from "@/app/_ai/tools/policy-search";
+import { createPolicySearchService, createPolicySearchTool } from "@/app/_ai/tools/policy-search";
+import { embedPolicyQuery } from "@/app/_ai/providers/policy-embedding-model";
+import { matchPolicyChunks } from "@/app/_ai/policies/policy-repository";
 import { createProxyAwareFetch } from "@/app/_lib/server-fetch";
 import type { PolicyRpcClient } from "@/app/_ai/policies/policy-repository";
 import { verifyPolicyAccess } from "../../scripts/verify-policy-access.mjs";
@@ -73,6 +75,7 @@ afterAll(async () => {
   await mkdir(".next/feature04-evidence", { recursive: true });
   // No identities, tokens, credentials, or vectors are written to the report.
   await writeFile(".next/feature04-evidence/live-closeout.json", JSON.stringify(report, null, 2));
+  await writeFile(`.next/feature04-evidence/live-closeout-${String(report.date).replace(/[:.]/g, "-")}.json`, JSON.stringify(report, null, 2));
   expect(cleanupFailures).toEqual([]);
 });
 
@@ -145,6 +148,21 @@ it.each(roles)("verifies a signed-in %s identity through tables, RPC, and the BF
 });
 
 it.each([
+  ["客人要求免除临时取消费，我应如何处理？只解释流程，不创建任何记录。", "Administrator escalation"],
+  ["严重过敏的异常处理流程是什么？只解释流程。", "High-priority cases"],
+])("checks live staff evidence facets: %s", async (question, section) => {
+  const retrieve = createPolicySearchService({ client: accounts.get("staff")!.client, allowedScopes: ["public", "staff"] });
+  const result = await retrieve({ question });
+  const facets = (report.staffFacets ??= []) as unknown[];
+  facets.push({ question, status: result.status, citations: result.citations });
+  expect(result.status).toBe("grounded");
+  expect(result.citations.some((citation) => citation.scope === "staff" && citation.section === section)).toBe(true);
+  if (section === "Administrator escalation") {
+    expect(result.citations.some((citation) => citation.documentId === "cancellation-refund")).toBe(true);
+  }
+});
+
+it.each([
   ["guest", "取消收费政策是什么？", "cancellation-refund"],
   ["staff", "取消收费政策是什么？", "cancellation-refund"],
   ["guest", "需要提前72小时申请无障碍支持吗？", "accessibility"],
@@ -156,6 +174,29 @@ it.each([
   }));
   expect(parsed.ok && parsed.currentPolicyQuestion).toBe(question);
   const account = accounts.get("staff")!;
+  const diagnostics: unknown[] = [];
+  const guestPolicyTool = createPolicySearchTool({
+    client: guest,
+    embedQuery: async (query) => {
+      try {
+        const vector = await embedPolicyQuery(query);
+        diagnostics.push({ stage: "embedding", dimensions: vector.length });
+        return vector;
+      } catch (error) {
+        diagnostics.push({ stage: "embedding", failed: true,
+          statusCode: (error as { statusCode?: number }).statusCode ?? null });
+        throw error;
+      }
+    },
+    search: async (input) => {
+      const matches = await matchPolicyChunks(input);
+      diagnostics.push({ stage: "retrieval", matches: matches.map((match) => ({
+        documentId: match.citation.documentId, section: match.citation.section,
+        similarity: match.semanticSimilarity,
+      })) });
+      return matches;
+    },
+  });
   const policyOnlyClient = {
     from: () => { throw new Error("Business tables are disabled in the live policy regression."); },
     rpc: ((name, parameters) => {
@@ -164,7 +205,7 @@ it.each([
     }) satisfies PolicyRpcClient["rpc"],
   };
   const agent = surface === "guest"
-    ? createConciergeAgent({ currentPolicyQuestion: question, policySearchTool: createPolicySearchTool({ client: guest }) })
+    ? createConciergeAgent({ currentPolicyQuestion: question, policySearchTool: guestPolicyTool })
     : createOperationsAgent({ client: policyOnlyClient, actorId: account.id, currentPolicyQuestion: question });
   const result = await agent.generate({
     messages: await convertToModelMessages(messages), timeout: { totalMs: 100_000 },
@@ -173,7 +214,7 @@ it.each([
     .filter((item) => item.toolName === "searchHotelPolicies");
   const output = policyResults[0]?.output as { citations?: Array<{ documentId: string }> };
   (report.answers as unknown[]).push({ surface, question, text: result.text,
-    citations: output?.citations, policyCalls: policyResults.length });
+    citations: output?.citations, policyCalls: policyResults.length, diagnostics });
   expect(policyResults).toHaveLength(1);
   expect(output.citations?.some((item) => item.documentId === documentId)).toBe(true);
   if (documentId === "cancellation-refund") {

@@ -1,4 +1,4 @@
-# Feature 04 validation — updated 2026-09-15
+# Feature 04 validation — closed 2026-09-16
 
 ## Current closeout status
 
@@ -8,14 +8,16 @@ The final website check passed all 441 tests and its production build; the admin
 check passed all 70 tests and its production build, with an additional TS/TSX lint
 and 54-test follow-up after fixing test import order.
 
-Live anonymous access, metadata-only dry-run, security/performance advisors and
-rollback-only database version/atomicity checks have been reconciled. Final
-signed-in ordinary/staff/admin and live-model regression are prepared but await
-explicit authorization following an automatic approval-review rejection. No live
-test accounts or model requests were created by that rejected invocation.
+Live anonymous and signed-in ordinary/staff/admin checks, metadata-only dry-run,
+security/performance advisors, rollback-only version/atomicity checks, one changed
+real embedding plus vector reuse, and guest/staff answer fidelity have passed.
+The user explicitly authorized the live regression. Twelve distinct live checks
+passed across targeted runs; earlier quota failures and one insufficient-evidence
+guest result are preserved in `policy-rag-live-evidence.json`. All nine temporary
+accounts across three runs were deleted; an independent final SQL count is zero.
 
-**Feature04 is not formally closed yet.** The authoritative current evidence,
-review scope, issue disposition and remaining gate are in
+**Feature04 is formally closed on 2026-09-16.** The authoritative current evidence,
+review scope, issue disposition and operational limits are in
 [the final closeout report](policy-rag-closeout.md). The dated sections below are
 historical, including their earlier pending-review/acceptance statements.
 

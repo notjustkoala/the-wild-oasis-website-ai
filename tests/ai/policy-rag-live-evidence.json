@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 1,
+  "closedAt": "2026-09-16",
+  "model": "gemini-3.6-flash",
+  "embeddingModel": "gemini-embedding-2",
+  "scope": "Live agents/services, signed-in Supabase table/RPC reads, BFF authorization function, and embedding planner. Not a fresh browser UI run.",
+  "coverage": {
+    "distinctPassedChecks": 12,
+    "singleFullGreenRun": false
+  },
+  "runs": [
+    {
+      "outcome": "8 passed; 2 accessibility generation tests failed on provider quota HTTP 429",
+      "report": {
+        "date": "2026-09-15T14:56:10.972Z",
+        "roles": {
+          "ordinary": {
+            "documents": 6,
+            "staffChunks": 0,
+            "staffRpcMatches": 0,
+            "bffAllowed": false,
+            "syncDenied": true
+          },
+          "staff": {
+            "documents": 7,
+            "staffChunks": 4,
+            "staffRpcMatches": 4,
+            "bffAllowed": true,
+            "syncDenied": true
+          },
+          "admin": {
+            "documents": 7,
+            "staffChunks": 4,
+            "staffRpcMatches": 4,
+            "bffAllowed": true,
+            "syncDenied": true
+          }
+        },
+        "answers": [
+          {
+            "surface": "guest",
+            "question": "取消收费政策是什么？",
+            "text": "根据酒店的取消与退款政策，具体的取消收费标准如下：\n\n- **入住前至少 7 天取消**：可获得全额退款。\n- **入住前 2 至 6 天取消**：收取首晚住宿费用。\n- **入住前少于 48 小时取消或未入住（No-show）**：收取全额预订费用。\n\n所有取消或未入住的扣费与退款均由酒店团队单独审核，经批准的退款将原路退回至您的原支付方式。AI 无法直接办理取消预订、扣费或退款，如需处理相关事宜，请直接联系酒店团队协助。",
+            "citations": [
+              {
+                "documentId": "payment-policy",
+                "title": "Payment policy",
+                "section": "Payment safety",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "The hotel team separately reviews any cancellation or no-show charge. The AI concierge does not collect payment information, create payment links, or confirm that a payment succeeded.",
+                "scope": "public"
+              },
+              {
+                "documentId": "cancellation-refund",
+                "title": "Cancellation and refund policy",
+                "section": "Cancellation charges",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "A cancellation made at least 7 days before check-in receives a full refund. A cancellation made 2 to 6 days before check-in is charged the first night's accommodation. A cancellation made less than 48 hours before check-in, or a no-show, is charged the full booking amount.",
+                "scope": "public"
+              },
+              {
+                "documentId": "cancellation-refund",
+                "title": "Cancellation and refund policy",
+                "section": "Review and processing",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "The hotel team reviews refunds and returns approved refunds to the original payment method. The AI concierge may explain this policy and direct the guest to the hotel team, but cannot cancel a booking, charge a fee, or issue a refund.",
+                "scope": "public"
+              }
+            ],
+            "policyCalls": 1
+          },
+          {
+            "surface": "staff",
+            "question": "取消收费政策是什么？",
+            "text": "根据酒店的取消与退款政策，具体的取消收费标准如下：\n\n1. **入住前至少 7 天取消**：可获得全额退款。\n2. **入住前 2 至 6 天取消**：收取首晚住宿费用。\n3. **入住前不足 48 小时取消，或未入住（No-show）**：收取全额预订费用。\n\n**审核与退款流程**：\n* 酒店团队会单独审核所有的取消及未入住扣费。\n* 审核通过后，退款将按原支付方式退回。",
+            "citations": [
+              {
+                "documentId": "payment-policy",
+                "title": "Payment policy",
+                "section": "Payment safety",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "The hotel team separately reviews any cancellation or no-show charge. The AI concierge does not collect payment information, create payment links, or confirm that a payment succeeded.",
+                "scope": "public"
+              },
+              {
+                "documentId": "cancellation-refund",
+                "title": "Cancellation and refund policy",
+                "section": "Cancellation charges",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "A cancellation made at least 7 days before check-in receives a full refund. A cancellation made 2 to 6 days before check-in is charged the first night's accommodation. A cancellation made less than 48 hours before check-in, or a no-show, is charged the full booking amount.",
+                "scope": "public"
+              },
+              {
+                "documentId": "cancellation-refund",
+                "title": "Cancellation and refund policy",
+                "section": "Review and processing",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "The hotel team reviews refunds and returns approved refunds to the original payment method. The AI concierge may explain this policy and direct the guest to the hotel team, but cannot cancel a booking, charge a fee, or issue a refund.",
+                "scope": "public"
+              }
+            ],
+            "policyCalls": 1
+          }
+        ],
+        "guest": {
+          "staffDocuments": 1,
+          "staffChunks": 4,
+          "guestVisibleStaffDocuments": 0,
+          "guestVisibleStaffChunks": 0,
+          "guestRpcStaffMatches": 0
+        },
+        "invalidSessionsDenied": true,
+        "incrementalEmbedding": {
+          "insert": 0,
+          "update": 1,
+          "unchanged": 6,
+          "deactivate": 0,
+          "embed": 1,
+          "reuse": 1,
+          "actualEmbeddedValues": 1,
+          "databaseWrites": 0
+        },
+        "temporaryAccountsCreated": 3,
+        "temporaryAccountsRemoved": 3
+      }
+    },
+    {
+      "outcome": "1 staff accessibility passed; 1 guest accessibility failed because retrieval returned insufficient evidence; 8 skipped. Failure cause not captured.",
+      "report": {
+        "date": "2026-09-16T07:34:31.353Z",
+        "roles": {},
+        "answers": [
+          {
+            "surface": "guest",
+            "question": "需要提前72小时申请无障碍支持吗？",
+            "text": "目前未查询到有关无障碍支持申请提前时间要求的明确政策规定。\n\n无障碍需求属于特殊申请事项，需要由酒店工作人员人工确认与安排。建议您直接联系酒店团队，以确认具体的申请流程和安排细节。",
+            "citations": [],
+            "policyCalls": 1
+          },
+          {
+            "surface": "staff",
+            "question": "需要提前72小时申请无障碍支持吗？",
+            "text": "根据酒店政策（*Accessibility requests - Requesting support*）：\n\n* **并非强制要求，而是建议**：客人应尽早告知行动、听力、视觉或其他无障碍需求，**建议至少在入住前 72 小时**提出。\n* **晚于该时间的申请**：现有政策未说明晚申请如何处理，请联系酒店团队确认具体的无障碍支持与安排。",
+            "citations": [
+              {
+                "documentId": "accessibility",
+                "title": "Accessibility requests",
+                "section": "Requesting support",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "Guests should disclose mobility, hearing, visual, or other accessibility needs as early as possible, preferably at least 72 hours before check-in.",
+                "scope": "public"
+              }
+            ],
+            "policyCalls": 1
+          }
+        ],
+        "temporaryAccountsCreated": 3,
+        "temporaryAccountsRemoved": 3
+      }
+    },
+    {
+      "outcome": "3 passed: guest accessibility retry, staff waiver facets, severe-allergy SOP; 9 skipped. No production code or retrieval thresholds changed.",
+      "report": {
+        "date": "2026-09-16T07:36:25.653Z",
+        "roles": {},
+        "answers": [
+          {
+            "surface": "guest",
+            "question": "需要提前72小时申请无障碍支持吗？",
+            "text": "根据酒店政策，客人应尽早告知肢体、听觉、视觉或其他无障碍需求，**建议至少在入住前 72 小时**提出。\n\n需要说明的是：\n- **“建议至少提前 72 小时”为建议时间而非强制要求。**\n- **无障碍需求属于特殊申请而非保证提供的设施**，具体能否安排需要酒店工作人员确认。\n- **现有政策未说明晚申请如何处理，请联系酒店团队确认。**\n\n如果您有具体的无障碍需求，建议您尽快与酒店团队联系，以便提前为您核实与安排。",
+            "citations": [
+              {
+                "documentId": "accessibility",
+                "title": "Accessibility requests",
+                "section": "Requesting support",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "Guests should disclose mobility, hearing, visual, or other accessibility needs as early as possible, preferably at least 72 hours before check-in.",
+                "scope": "public"
+              }
+            ],
+            "policyCalls": 1,
+            "diagnostics": [
+              {
+                "stage": "embedding",
+                "dimensions": 768
+              },
+              {
+                "stage": "retrieval",
+                "matches": [
+                  {
+                    "documentId": "accessibility",
+                    "section": "Requesting support",
+                    "similarity": 0.746664827663692
+                  },
+                  {
+                    "documentId": "accessibility",
+                    "section": "Confirmation and service animals",
+                    "similarity": 0.657688616100899
+                  },
+                  {
+                    "documentId": "breakfast-dietary",
+                    "section": "Dietary requests",
+                    "similarity": 0.608495717344155
+                  },
+                  {
+                    "documentId": "check-in-check-out",
+                    "section": "Early arrival and late departure",
+                    "similarity": 0.583851347428725
+                  },
+                  {
+                    "documentId": "cancellation-refund",
+                    "section": "Cancellation charges",
+                    "similarity": 0.560571546793042
+                  },
+                  {
+                    "documentId": "breakfast-dietary",
+                    "section": "Optional breakfast",
+                    "similarity": 0.55855893551783
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "staffFacets": [
+          {
+            "question": "客人要求免除临时取消费，我应如何处理？只解释流程，不创建任何记录。",
+            "status": "grounded",
+            "citations": [
+              {
+                "documentId": "exception-handling-sop",
+                "title": "Exception handling SOP",
+                "section": "Administrator escalation",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "Escalate policy waivers, fee reductions, refund exceptions, over-limit pets, and unconfirmed accessibility arrangements for administrator approval.",
+                "scope": "staff"
+              },
+              {
+                "documentId": "cancellation-refund",
+                "title": "Cancellation and refund policy",
+                "section": "Review and processing",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "The hotel team reviews refunds and returns approved refunds to the original payment method. The AI concierge may explain this policy and direct the guest to the hotel team, but cannot cancel a booking, charge a fee, or issue a refund.",
+                "scope": "public"
+              },
+              {
+                "documentId": "cancellation-refund",
+                "title": "Cancellation and refund policy",
+                "section": "Cancellation charges",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "A cancellation made at least 7 days before check-in receives a full refund. A cancellation made 2 to 6 days before check-in is charged the first night's accommodation. A cancellation made less than 48 hours before check-in, or a no-show, is charged the full booking amount.",
+                "scope": "public"
+              },
+              {
+                "documentId": "payment-policy",
+                "title": "Payment policy",
+                "section": "Payment safety",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "The hotel team separately reviews any cancellation or no-show charge. The AI concierge does not collect payment information, create payment links, or confirm that a payment succeeded.",
+                "scope": "public"
+              }
+            ]
+          },
+          {
+            "question": "严重过敏的异常处理流程是什么？只解释流程。",
+            "status": "grounded",
+            "citations": [
+              {
+                "documentId": "exception-handling-sop",
+                "title": "Exception handling SOP",
+                "section": "High-priority cases",
+                "version": 1,
+                "effectiveDate": "2026-08-30",
+                "excerpt": "Mark health and safety concerns, severe allergies, and issues that may prevent check-in as high priority and handle them immediately with a person.",
+                "scope": "staff"
+              }
+            ]
+          }
+        ],
+        "temporaryAccountsCreated": 3,
+        "temporaryAccountsRemoved": 3
+      }
+    }
+  ],
+  "finalDatabaseVerification": {
+    "temporaryTestAccounts": 0,
+    "policyDocuments": 7,
+    "currentDocuments": 7,
+    "policyChunks": 16,
+    "bookings": 800,
+    "approvals": 3,
+    "auditRows": 6
+  },
+  "limitations": [
+    "Point-in-time samples do not guarantee all future model answers.",
+    "Earlier guest insufficiency could not be attributed to a specific dependency; retry diagnostics confirmed successful 768-dimensional embedding and accessibility similarity 0.746664827663692.",
+    "Provider quota and known conservative vocabulary remain operational limits."
+  ]
+}

@@ -17,19 +17,19 @@ control of facts, authorization and mutations.
 | Surface | What it demonstrates | Source | Production |
 | --- | --- | --- | --- |
 | Guest Experience + AI BFF | Streaming recommendations, policy Q&A, editable reservation prefill | this repository | Not deployed/verified |
-| Staff Operations | Risk Briefing, KPI/chart/booking cards, approval workflow | [paired admin](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/README.md) | Not deployed/verified |
-| Portfolio evidence | architecture, case study, timed demo, eval and resume claims | [case study](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/docs/portfolio/CASE_STUDY.md) | Local/versioned artifacts |
+| Staff Operations | Risk Briefing, KPI/chart/booking cards, approval workflow | [paired admin](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/README.md) | Not deployed/verified |
+| Portfolio evidence | architecture, case study, timed demo, eval and resume claims | [case study](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/CASE_STUDY.md) | Local/versioned artifacts |
 
-Cross-repository links target the intended `codex/ai-hospitality-platform`
-branches in two independent GitHub origins. The current Feature06 changes are
-not pushed, so those links must be clicked and verified after publication.
+Cross-repository links target the published `main` branches in two independent
+GitHub origins. Feature06 source publication and Markdown link checks are
+complete; application deployment URLs still require production verification.
 
 `guest.example` and `staff.example` are target-role placeholders, not live URLs.
-The [deployment runbook](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/docs/portfolio/DEPLOYMENT_RUNBOOK.md)
+The [deployment runbook](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/DEPLOYMENT_RUNBOOK.md)
 requires real HTTPS URLs and explicit smoke verification before they are shown as
 deployed.
 
-![Wild Oasis dual-surface architecture](https://raw.githubusercontent.com/notjustkoala/the-wild-oasis/codex/ai-hospitality-platform/docs/portfolio/assets/architecture.svg)
+![Wild Oasis dual-surface architecture](https://raw.githubusercontent.com/notjustkoala/the-wild-oasis-ai/main/docs/portfolio/assets/architecture.svg)
 
 The Guest browser can read public inventory and submit bounded user intent. The
 Next.js server rebuilds untrusted chat input, invokes typed inventory/policy or
@@ -45,7 +45,7 @@ write pauses for explicit approval or rejection.
   telemetry and tool contracts; deployment must bind the exact Staff origin.
 - **Deterministic business rules:** the model selects tools and explains results,
   while code owns price, availability, citations and allow-listed writes.
-- **Evidence layers stay separate:** see the [AI Eval Report](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/docs/portfolio/AI_EVAL_REPORT.md)
+- **Evidence layers stay separate:** see the [AI Eval Report](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/AI_EVAL_REPORT.md)
   for offline contract, HTTP fixture, real-model and development-database results.
 - **Privacy-minimized tracing:** controlled metadata and signed feedback are kept;
   prompts, answers, tool arguments, user IDs and raw errors are not stored.
@@ -58,7 +58,7 @@ The interview path is Guest complex request → live recommendation → reservat
 prefill; Staff special request → Risk Briefing → correction; then Copilot
 question → KPI/chart/order evidence → reject or approve a note. It closes on an
 unauthorized request and eval/tracing evidence. Use the
-[timed script](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/docs/portfolio/DEMO_SCRIPT.md); the backup
+[timed script](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/DEMO_SCRIPT.md); the backup
 recording and three human-timed runs remain pending.
 
 Demo identity labels describe roles, not committed usernames or passwords:
@@ -444,7 +444,7 @@ one day. No scheduled cleanup is created automatically. Review retention and
 target environment before using that maintenance command.
 
 Cross-repository progress and human acceptance requirements are in
-[`FEATURE06_PROGRESS.md`](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/docs/FEATURE06_PROGRESS.md).
+[`FEATURE06_PROGRESS.md`](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/FEATURE06_PROGRESS.md).
 
 ## Limitations and future work
 

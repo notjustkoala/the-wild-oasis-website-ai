@@ -7,6 +7,8 @@ describe("booking insight migration contract", () => {
     "supabase/migrations/20260816124054_booking_ai_insights.sql";
   const optimizationMigration =
     "supabase/migrations/20260816124854_optimize_booking_ai_insight_rls_initplan.sql";
+  const serviceRoleReadMigration =
+    "supabase/migrations/20260922160617_grant_service_role_ai_insight_read.sql";
   const sql = readFileSync(
     join(
       process.cwd(),
@@ -16,6 +18,10 @@ describe("booking insight migration contract", () => {
   );
   const optimizationSql = readFileSync(
     join(process.cwd(), optimizationMigration),
+    "utf8"
+  );
+  const serviceRoleReadSql = readFileSync(
+    join(process.cwd(), serviceRoleReadMigration),
     "utf8"
   );
 
@@ -71,5 +77,15 @@ describe("booking insight migration contract", () => {
       )
     ).toHaveLength(4);
     expect(optimizationSql).not.toMatch(/\(select auth\.jwt\(\) ->/i);
+  });
+
+  it("gives the service-only reset verification read access without widening clients", () => {
+    expect(
+      serviceRoleReadSql.match(
+        /grant select on table public\.booking_ai_insights to service_role/gi
+      )
+    ).toHaveLength(1);
+    expect(serviceRoleReadSql).not.toMatch(/\bto\s+(?:public|anon|authenticated)\b/i);
+    expect(serviceRoleReadSql).not.toMatch(/\b(?:insert|update|delete)\b/i);
   });
 });

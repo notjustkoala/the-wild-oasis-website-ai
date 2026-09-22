@@ -25,6 +25,9 @@ type AnalyzeDependencies = {
   env?: NodeJS.ProcessEnv;
   promptVersion?: string;
   generate?: (redactedObservation: string) => Promise<BookingInsight>;
+  traceId?: string;
+  signal?: AbortSignal;
+  onGeneration?: () => void;
 };
 
 function failureCode(error: unknown): BookingInsightFailureCode {
@@ -74,9 +77,10 @@ export async function analyzeBookingInsight(
   }
 
   try {
+    dependencies.onGeneration?.();
     // This is the only value allowed to cross the model-provider boundary.
     const result = await (dependencies.generate ?? ((value) =>
-      generateBookingInsight(value, { env })))(safeObservation.value);
+      generateBookingInsight(value, { env, traceId: dependencies.traceId, signal: dependencies.signal })))(safeObservation.value);
     const completed = await repository.complete({
       bookingId,
       generationToken: claimed.generation_token,

@@ -1,0 +1,1057 @@
+{
+  "schemaVersion": 1,
+  "mode": "offline-mock-and-synthetic",
+  "seed": 5,
+  "referenceDate": "2026-09-17",
+  "generatedAt": "2026-09-20T11:49:56.298Z",
+  "model": "MockLanguageModelV4 / synthetic feature vectors",
+  "promptVersion": "feature05-eval-v1",
+  "count": 69,
+  "metrics": {
+    "toolSelection": {
+      "passed": 45,
+      "applicable": 45,
+      "skipped": 24,
+      "rate": 1
+    },
+    "hardConstraints": {
+      "passed": 69,
+      "applicable": 69,
+      "skipped": 0,
+      "rate": 1
+    },
+    "citations": {
+      "passed": 24,
+      "applicable": 24,
+      "skipped": 45,
+      "rate": 1
+    },
+    "authorization": {
+      "passed": 64,
+      "applicable": 64,
+      "skipped": 5,
+      "rate": 1
+    }
+  },
+  "failures": [],
+  "results": [
+    {
+      "id": "concierge-normal-01",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 4,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-normal-02",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 3,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-normal-03",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-normal-04",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-normal-05",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-normal-06",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-normal-07",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-normal-08",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 3,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-missing-01",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-missing-02",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-missing-03",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-missing-04",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 3,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-missing-05",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-conflict-01",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-conflict-02",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-conflict-03",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 3,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-budget-01",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-budget-02",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-budget-03",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-capacity-01",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-capacity-02",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 3,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-capacity-03",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 4,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-none-01",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 3,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-none-02",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-inject-01",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-inject-02",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 3,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-inject-03",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-inject-04",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-recover-01",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-recover-02",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-recover-03",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "concierge-recover-04",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-pet-weight-en",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 12,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-pet-count-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 9,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-cancel-seven-en",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 11,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-cancel-three-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 6,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-checkin-time-en",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 6,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-late-checkout-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 6,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-payment-en",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 6,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-payment-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 5,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-service-animal-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 6,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-accessibility-en",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 7,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-breakfast-live-price",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 7,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-cross-cancel-payment",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 7,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-cancel-all-free-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 5,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-staff-waiver",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": null
+      },
+      "failures": [],
+      "durationMs": 7,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-staff-allergy-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": null
+      },
+      "failures": [],
+      "durationMs": 8,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-guest-staff-injection",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 7,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-guest-staff-injection-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 6,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-staff-sop-override-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": null
+      },
+      "failures": [],
+      "durationMs": 5,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-unknown-lifeguard",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 5,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-unknown-lifeguard-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 7,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-unknown-lifeguard-staff-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": null
+      },
+      "failures": [],
+      "durationMs": 7,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-cancel-all-free-staff-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": null
+      },
+      "failures": [],
+      "durationMs": 6,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-unknown-shuttle-zh",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 5,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "rag-conflicting-old-version",
+      "mode": "synthetic-retrieval",
+      "checks": {
+        "toolSelection": null,
+        "hardConstraints": true,
+        "citations": true,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 8,
+      "tools": [],
+      "status": "completed"
+    },
+    {
+      "id": "ops-arrivals",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 6,
+      "tools": [
+        "getArrivals"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "ops-revenue",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "getBookingMetrics"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "ops-risk",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "getBookingRisks"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "ops-details",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "getBookingDetails"
+      ],
+      "status": "completed"
+    },
+    {
+      "id": "ops-anonymous",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 3,
+      "tools": [],
+      "status": "denied"
+    },
+    {
+      "id": "ops-guest",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "denied"
+    },
+    {
+      "id": "ops-forged-role",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 1,
+      "tools": [],
+      "status": "denied"
+    },
+    {
+      "id": "ops-rejection",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 0,
+      "tools": [],
+      "status": "rejected"
+    },
+    {
+      "id": "ops-tool-error",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 4,
+      "tools": [
+        "getArrivals"
+      ],
+      "status": "tool-error"
+    },
+    {
+      "id": "concierge-tool-error",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "tool-error"
+    },
+    {
+      "id": "concierge-cancelled",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [],
+      "status": "cancelled"
+    },
+    {
+      "id": "ops-cancelled",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 2,
+      "tools": [],
+      "status": "cancelled"
+    },
+    {
+      "id": "concierge-multiturn",
+      "mode": "offline-mock",
+      "checks": {
+        "toolSelection": true,
+        "hardConstraints": true,
+        "citations": null,
+        "authorization": true
+      },
+      "failures": [],
+      "durationMs": 3,
+      "tools": [
+        "searchAvailableCabins"
+      ],
+      "status": "completed"
+    }
+  ]
+}

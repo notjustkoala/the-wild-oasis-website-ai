@@ -7,6 +7,7 @@ export const DEMO_SEED = 20260803;
 export const DEMO_BOOKING_COUNT = 800;
 export const DEMO_MONTHS = 12;
 export const DEMO_GUEST_COUNT = 30;
+export const DEMO_DATASET_ID = "wild-oasis-demo-20260803-v1";
 export const LOCAL_SUPABASE_TARGET = Object.freeze({
   kind: "local",
   databaseUrl: "postgresql://127.0.0.1:54322/postgres",
@@ -27,6 +28,7 @@ export const BOOKING_SQL_COLUMNS = Object.freeze([
   "isPaid",
   "cabinId",
   "guestId",
+  "demo_dataset_id",
 ]);
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
@@ -217,6 +219,7 @@ export function generateDemoData({ seed = DEMO_SEED, count = DEMO_BOOKING_COUNT 
       demoGuestRef: `DEMO-GUEST-${String(
         (index % DEMO_GUEST_COUNT) + 1
       ).padStart(3, "0")}`,
+      demoDatasetId: DEMO_DATASET_ID,
       numNights,
       numGuests,
       leadTimeDays,
@@ -265,6 +268,7 @@ function bookingSqlValues(booking) {
     isPaid: booking.isPaid,
     cabinId: booking.cabinId,
     guestId: booking.guestId,
+    demo_dataset_id: booking.demoDatasetId,
   };
 
   return `(${BOOKING_SQL_COLUMNS.map((column) =>
@@ -275,6 +279,9 @@ function bookingSqlValues(booking) {
 export function renderSeedSql(bookings) {
   if (!Array.isArray(bookings) || bookings.length === 0) {
     throw new Error("At least one booking is required for SQL output");
+  }
+  if (bookings.some((booking) => booking.demoDatasetId !== DEMO_DATASET_ID)) {
+    throw new Error("Every booking must use the fixed demo dataset provenance");
   }
 
   const quotedColumns = BOOKING_SQL_COLUMNS.map(
@@ -311,11 +318,32 @@ begin
   if exists (select 1 from public.bookings) then
     raise exception 'Bookings seed requires an empty public.bookings table';
   end if;
+  if exists (
+    select 1 from private.demo_booking_baseline
+    where demo_dataset_id = ${sqlLiteral(DEMO_DATASET_ID)}
+  ) then
+    raise exception 'Bookings seed requires an empty demo booking baseline';
+  end if;
 end
 $seed_prerequisites$;
 
 insert into public.bookings (${quotedColumns}) values
   ${values};
+
+insert into private.demo_booking_baseline (
+  id, demo_dataset_id, created_at, "startDate", "endDate", "numNights",
+  "numGuests", "cabinPrice", "extrasPrice", "totalPrice", status,
+  "hasBreakfast", observations, "isPaid", "cabinId", "guestId",
+  "internalNote"
+)
+select
+  id, demo_dataset_id, created_at, "startDate", "endDate", "numNights",
+  "numGuests", "cabinPrice", "extrasPrice", "totalPrice", status,
+  "hasBreakfast", observations, "isPaid", "cabinId", "guestId",
+  "internalNote"
+from public.bookings
+where demo_dataset_id = ${sqlLiteral(DEMO_DATASET_ID)}
+order by id;
 
 select setval(
   pg_get_serial_sequence('public.bookings', 'id'),
@@ -327,6 +355,12 @@ do $seed_postconditions$
 begin
   if (select count(*) from public.bookings) <> ${bookings.length} then
     raise exception 'Bookings seed row-count verification failed';
+  end if;
+  if (
+    select count(*) from private.demo_booking_baseline
+    where demo_dataset_id = ${sqlLiteral(DEMO_DATASET_ID)}
+  ) <> ${bookings.length} then
+    raise exception 'Demo booking baseline row-count verification failed';
   end if;
 end
 $seed_postconditions$;

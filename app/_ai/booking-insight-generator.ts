@@ -8,7 +8,8 @@ import {
   type LanguageModel,
 } from "ai";
 
-import { resolveBookingInsightModel } from "@/app/_ai/providers/booking-insight-model";
+import { resolveBookingInsightModel, resolveBookingInsightModelIdentity } from "@/app/_ai/providers/booking-insight-model";
+import { createRunObserver, type RunObserver } from "@/app/_ai/observability/run";
 import {
   bookingInsightSchema,
   type BookingInsight,
@@ -41,13 +42,23 @@ type GeneratorDependencies = {
   generate?: typeof generateText;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
+  traceId?: string;
+  signal?: AbortSignal;
+  observer?: RunObserver;
 };
 
 export async function generateBookingInsight(
   redactedObservation: string,
   dependencies: GeneratorDependencies = {}
 ): Promise<BookingInsight> {
+  let modelName = "unconfigured";
+  try { modelName = resolveBookingInsightModelIdentity(dependencies.env).modelId; } catch { /* no configuration values in telemetry */ }
+  const observer = dependencies.observer ?? createRunObserver({ surface: "booking-insight", model: modelName, promptVersion: BOOKING_INSIGHT_PROMPT_VERSION, traceId: dependencies.traceId });
   const controller = new AbortController();
+  const detach = observer.watch(dependencies.signal);
+  const cancel = () => controller.abort();
+  if (dependencies.signal?.aborted) cancel();
+  else dependencies.signal?.addEventListener("abort", cancel, { once: true });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
@@ -69,10 +80,14 @@ export async function generateBookingInsight(
         redactedObservation
       )}`,
       abortSignal: controller.signal,
+      onStepEnd: observer.step,
     });
 
-    return bookingInsightSchema.parse(result.output);
+    const parsed = bookingInsightSchema.parse(result.output);
+    await observer.finish();
+    return parsed;
   } catch (error) {
+    await observer.finish(dependencies.signal?.aborted ? "cancelled" : timedOut ? "timeout" : "failed", dependencies.signal?.aborted ? "cancelled" : timedOut ? "timeout" : error instanceof Error && error.name === "ConciergeProviderConfigurationError" ? "configuration" : "provider-unavailable");
     if (timedOut) throw new BookingInsightGenerationError("timeout");
     if (
       NoObjectGeneratedError.isInstance(error) ||
@@ -89,5 +104,7 @@ export async function generateBookingInsight(
     throw new BookingInsightGenerationError("provider-unavailable");
   } finally {
     clearTimeout(timer);
+    detach();
+    dependencies.signal?.removeEventListener("abort", cancel);
   }
 }

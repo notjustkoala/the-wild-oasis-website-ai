@@ -9,6 +9,7 @@ import { parseOperationsDate, resolveRelativeOperationsDateRange } from "@/app/_
 import { resolveConciergeModel } from "@/app/_ai/providers/concierge-model";
 import policyConfig from "@/policy-rag.config.json";
 import { POLICY_ANSWER_INSTRUCTIONS } from "@/app/_ai/policies/policy-answer-instructions";
+import type { RunObserver } from "@/app/_ai/observability/run";
 
 export const OPERATIONS_INSTRUCTIONS = `You are the Wild Oasis operations copilot for authenticated hotel staff.
 
@@ -59,12 +60,14 @@ export function createOperationsAgent({
   model,
   referenceDate = new Date(),
   currentPolicyQuestion,
+  observer,
 }: {
   client: { from: (table: string) => unknown } & Partial<PolicyRpcClient>;
   actorId: string;
   model?: LanguageModel;
   referenceDate?: Date;
   currentPolicyQuestion?: string;
+  observer?: RunObserver;
 }) {
   const tools = createOperationsTools({ client, actorId });
   const explanationOnly = isPolicyExplanationOnlyRequest(currentPolicyQuestion ?? "");
@@ -77,6 +80,7 @@ export function createOperationsAgent({
 
   return new ToolLoopAgent({
     id: "wild-oasis-operations-copilot",
+    onStepEnd: observer?.step,
     model: model ?? resolveConciergeModel(),
     instructions: createOperationsInstructions(referenceDate),
     tools,

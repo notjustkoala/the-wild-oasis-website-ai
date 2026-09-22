@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-09-20T11:50:39.719Z",
+  "mode": "real-dev-database-concurrent-http",
+  "requestCount": 5,
+  "limit": 2,
+  "allowed": 2,
+  "denied": 3,
+  "requests": [
+    {
+      "index": 0,
+      "ok": true,
+      "status": 200,
+      "code": null,
+      "allowed": false
+    },
+    {
+      "index": 1,
+      "ok": true,
+      "status": 200,
+      "code": null,
+      "allowed": true
+    },
+    {
+      "index": 2,
+      "ok": true,
+      "status": 200,
+      "code": null,
+      "allowed": false
+    },
+    {
+      "index": 3,
+      "ok": true,
+      "status": 200,
+      "code": null,
+      "allowed": false
+    },
+    {
+      "index": 4,
+      "ok": true,
+      "status": 200,
+      "code": null,
+      "allowed": true
+    }
+  ],
+  "cleanupRemaining": 0,
+  "cleanupSucceeded": true
+}

@@ -4,6 +4,7 @@ import { MAX_BOOKING_INSIGHT_BODY_BYTES } from "@/app/_ai/booking-insight-reques
 import type { BookingInsightRepository } from "@/app/_ai/booking-insight-repository";
 import { BookingInsightStaleError } from "@/app/_ai/booking-insight-view";
 import { createCurrentBookingInsightIdentity } from "@/app/_ai/booking-insight-identity";
+vi.mock("@/app/_ai/observability/access", async importOriginal => ({ ...await importOriginal<typeof import("@/app/_ai/observability/access")>(), enforceRateLimit: vi.fn().mockResolvedValue({ ok: true }) }));
 
 const repository = {} as never;
 const authorized = vi.fn().mockResolvedValue({

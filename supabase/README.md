@@ -8,10 +8,16 @@ should use snake_case.
 
 The only supported initialization order is:
 
-1. Apply `migrations/20260805162245_dev_database_bootstrap.sql`.
+1. Review and apply **every** versioned SQL file in `migrations/` in ascending
+   filename order, starting with
+   `20260806143548_dev_database_bootstrap.sql`. Do not cherry-pick the
+   Feature06 reset migration: `20260922064008_add_safe_demo_reset.sql` must run
+   after all earlier migrations, including those that add `internalNote`, AI
+   insight, Copilot, policy RAG, and observability objects.
 2. Render and apply the base seed (8 cabins, settings `id=1`, 30 guests).
 3. Upload `cabin-001.jpg` through `cabin-008.jpg` to `cabin-images`.
-4. Apply `seed.sql` to add the deterministic 800 bookings.
+4. Apply `seed.sql` to add the deterministic 800 bookings and their private
+   reset baseline in one transaction.
 
 Remote schema/seed execution is allowed only after explicit user authorization
 and only through the reviewed migration/database tool. Do not add `--linked`,
@@ -21,12 +27,14 @@ SQL file, source file, screenshot, log, or chat.
 
 ## 1. Schema
 
-The migration creates the four public tables, constraints, indexes,
-`btree_gist` half-open booking exclusion constraint, explicit Data API grants,
-RLS policies, and the public `cabin-images` bucket. Anonymous access is limited
-to cabins, settings, and the four booking availability columns. Admin browser
-access requires `app_metadata.role = admin`; editable `user_metadata` is never
-used. Customer private access uses the server-only Supabase secret.
+The initial bootstrap migration creates the four core public tables,
+constraints, indexes, `btree_gist` half-open booking exclusion constraint,
+explicit Data API grants, RLS policies, and the public `cabin-images` bucket.
+All later migrations are also required and extend that schema in filename
+order. Anonymous access is limited to cabins, settings, and the four booking
+availability columns. Admin browser access requires
+`app_metadata.role = admin`; editable `user_metadata` is never used. Customer
+private access uses the server-only Supabase secret.
 
 ## 2. Base seed
 
@@ -80,10 +88,19 @@ npm run seed:demo -- --target=local --format=sql --write --output=supabase/seed.
 ```
 
 The booking seed requires exact cabin IDs 1-8, guest IDs 1-30, settings
-`id=1`, and an empty bookings table. It uses an explicit column allowlist,
-escapes strings, resets the booking identity sequence, verifies the inserted
-row count, and runs in one transaction. Non-cancelled generated stays do not
-overlap, so they satisfy the database exclusion constraint.
+`id=1`, an empty bookings table, and an empty fixed-dataset baseline. It uses an
+explicit column allowlist, assigns only `wild-oasis-demo-20260803-v1`
+provenance, escapes strings, fills the private RLS-protected baseline, resets
+the booking identity sequence, verifies both row counts, and runs in one
+transaction. Non-cancelled generated stays do not overlap, so they satisfy the
+database exclusion constraint.
+
+After seeding a local or explicitly authorized isolated Demo Project, run
+`supabase/tests/demo_reset.sql` as database owner. It is rollback-only and
+checks client denial, fixed provenance, repeatability, non-demo preservation,
+cascade cleanup and failure atomicity. The application Cron remains disabled
+until this test passes. The browser never receives the service secret or reset
+RPC permission.
 
 For a local Supabase instance, the reviewed files can be inspected/applied with
 local tooling after the CLI is available. Remote execution is deliberately not

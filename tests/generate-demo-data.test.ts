@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   DEMO_BOOKING_COUNT,
+  DEMO_DATASET_ID,
   DEMO_MONTHS,
   DEMO_SEED,
   generateDemoData,
@@ -20,6 +21,9 @@ describe("demo data generator", () => {
     const second = generateDemoData({ seed: DEMO_SEED });
 
     expect(first.bookings).toHaveLength(DEMO_BOOKING_COUNT);
+    expect(new Set(first.bookings.map((booking) => booking.demoDatasetId))).toEqual(
+      new Set([DEMO_DATASET_ID])
+    );
     expect(DEMO_MONTHS).toBe(12);
     expect(Object.keys(first.summary.byMonth)).toHaveLength(DEMO_MONTHS);
     expect(Object.values(first.summary.byMonth)).not.toContain(0);
@@ -78,7 +82,24 @@ describe("demo data generator", () => {
     expect(sql).toContain("O''Malley needs a quiet room");
     expect(sql).not.toContain("maliciousExtraColumn");
     expect(sql).not.toContain('"demoRef"');
-    expect(sql).toContain('"cabinId", "guestId"');
+    expect(sql).toContain('"cabinId", "guestId", "demo_dataset_id"');
+    expect(sql).toContain(
+      "insert into private.demo_booking_baseline"
+    );
+    expect(sql).toContain(
+      "Bookings seed requires an empty demo booking baseline"
+    );
+    expect(sql).toContain(DEMO_DATASET_ID);
+  });
+
+  it("refuses to render bookings whose demo provenance is missing or changed", () => {
+    const booking = generateDemoData().bookings[0];
+    expect(() =>
+      renderSeedSql([{ ...booking, demoDatasetId: null }])
+    ).toThrow("fixed demo dataset provenance");
+    expect(() =>
+      renderSeedSql([{ ...booking, demoDatasetId: "another-dataset" }])
+    ).toThrow("fixed demo dataset provenance");
   });
 
   it("keeps the committed booking SQL byte-for-byte synchronized with the canonical generator", async () => {

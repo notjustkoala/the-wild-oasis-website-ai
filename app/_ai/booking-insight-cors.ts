@@ -49,5 +49,6 @@ export function bookingInsightCors(
   headers.set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   headers.set("Access-Control-Max-Age", "600");
+  headers.set("Access-Control-Expose-Headers", "X-AI-Trace-Id, X-AI-Feedback-Token, Retry-After");
   return { ok: true, headers };
 }

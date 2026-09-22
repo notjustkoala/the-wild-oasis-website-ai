@@ -1,8 +1,71 @@
-# The Wild Oasis Website
+# Wild Oasis AI Hospitality Platform — Guest Experience and AI BFF
 
-Next.js guest website for cabin discovery, authentication, reservations, and
-account management. This Worktree is isolated from the existing application
-and should point only to a dedicated development Supabase project.
+Wild Oasis AI Hospitality Platform is a two-surface portfolio project for an
+AI-assisted accommodation business. This Next.js application serves guests,
+streams AI room and policy guidance, and hosts the shared BFF used by the paired
+React/Vite staff application.
+
+Guests should be able to express dates, party size, budget and preferences in
+plain language without trusting a model to invent inventory or create a booking.
+Staff should get risk and performance answers without exposing unrestricted
+customer data or database writes. The platform therefore lets AI interpret and
+orchestrate while typed tools, trusted server code, Supabase RLS and humans keep
+control of facts, authorization and mutations.
+
+## Product map and links
+
+| Surface | What it demonstrates | Source | Production |
+| --- | --- | --- | --- |
+| Guest Experience + AI BFF | Streaming recommendations, policy Q&A, editable reservation prefill | this repository | Not deployed/verified |
+| Staff Operations | Risk Briefing, KPI/chart/booking cards, approval workflow | [paired admin](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/README.md) | Not deployed/verified |
+| Portfolio evidence | architecture, case study, timed demo, eval and resume claims | [case study](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/docs/portfolio/CASE_STUDY.md) | Local/versioned artifacts |
+
+Cross-repository links target the intended `codex/ai-hospitality-platform`
+branches in two independent GitHub origins. The current Feature06 changes are
+not pushed, so those links must be clicked and verified after publication.
+
+`guest.example` and `staff.example` are target-role placeholders, not live URLs.
+The [deployment runbook](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/docs/portfolio/DEPLOYMENT_RUNBOOK.md)
+requires real HTTPS URLs and explicit smoke verification before they are shown as
+deployed.
+
+![Wild Oasis dual-surface architecture](https://raw.githubusercontent.com/notjustkoala/the-wild-oasis/codex/ai-hospitality-platform/docs/portfolio/assets/architecture.svg)
+
+The Guest browser can read public inventory and submit bounded user intent. The
+Next.js server rebuilds untrusted chat input, invokes typed inventory/policy or
+staff tools, and stores privacy-minimized telemetry. Concierge has no booking
+mutation tool: **Adopt plan** only prefills the existing form, whose trusted
+server action rechecks capacity, price and overlap. Staff calls carry an
+employee JWT, are reauthorized from `app_metadata.role`, and the sole Copilot
+write pauses for explicit approval or rejection.
+
+## Engineering choices
+
+- **One BFF for two surfaces:** centralizes provider secrets, validation,
+  telemetry and tool contracts; deployment must bind the exact Staff origin.
+- **Deterministic business rules:** the model selects tools and explains results,
+  while code owns price, availability, citations and allow-listed writes.
+- **Evidence layers stay separate:** see the [AI Eval Report](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/docs/portfolio/AI_EVAL_REPORT.md)
+  for offline contract, HTTP fixture, real-model and development-database results.
+- **Privacy-minimized tracing:** controlled metadata and signed feedback are kept;
+  prompts, answers, tool arguments, user IDs and raw errors are not stored.
+- **Graceful degradation:** AI failures leave ordinary cabin filtering,
+  reservation entry and staff booking workflows usable.
+
+## Five-minute demo
+
+The interview path is Guest complex request → live recommendation → reservation
+prefill; Staff special request → Risk Briefing → correction; then Copilot
+question → KPI/chart/order evidence → reject or approve a note. It closes on an
+unauthorized request and eval/tracing evidence. Use the
+[timed script](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/docs/portfolio/DEMO_SCRIPT.md); the backup
+recording and three human-timed runs remain pending.
+
+Demo identity labels describe roles, not committed usernames or passwords:
+`DEMO_GUEST` is a customer; `DEMO_ADMIN` uses the existing admin role only for
+the admin-only Risk Briefing; `DEMO_STAFF` uses the staff role for Copilot;
+`DEMO_DENIED` has no employee role or is logged out. Roles must be assigned via
+trusted `app_metadata`; editable `user_metadata` never grants access.
 
 ## Local setup
 
@@ -182,7 +245,7 @@ idempotent approval endpoint. Rejection is terminal, and approval updates only
 access to bookings but no direct booking write policy. The Feature 03 migrations
 have been applied to the dedicated Dev Supabase project (`wild-oasis-dev`); the
 original application's project and database were not modified. The append-only
-`20260825000100_optimize_ai_operations_advisors.sql` migration adds the missing
+`20260824163705_optimize_ai_operations_advisors.sql` migration adds the missing
 foreign-key indexes, normalizes Feature 03 RLS expressions, and preserves the
 constrained approval RPC contract.
 
@@ -238,6 +301,8 @@ npm run test
 npm run test:ai
 npm run build
 npm run check
+npm run docs:check
+npm run smoke:production # requires a real GUEST_PRODUCTION_URL
 ```
 
 Vitest tests use mocks and pure dependencies; they do not connect to Supabase.
@@ -245,6 +310,11 @@ New `.ts`/`.tsx` modules are checked without migrating stable JavaScript.
 `npm run test:ai` runs deterministic concierge and booking-insight cases plus provider,
 inventory, security, context, and UI checks without calling Gemini, Gateway,
 or Supabase.
+
+`npm run eval:ai` produces the fixed 69-case offline report; its 100% applicable
+contract checks are not model accuracy. `docs:check` validates local Markdown
+links without network access. `smoke:production` rejects missing, local, private
+and placeholder URLs; it has not been run because no real deployment exists.
 
 ## Trusted reservation flow
 
@@ -278,7 +348,117 @@ breakfast, and fixed special-request categories (including an adversarial
 prompt sample). It has no remote write mode and restricts output to local
 generated-data folders. See `supabase/README.md` before any future import.
 
+The generated SQL marks every seeded booking with the fixed
+`wild-oasis-demo-20260803-v1` provenance and fills an RLS-protected private
+baseline in the same transaction. A service-role-only, parameterless RPC can
+restore only that dataset, under a transaction advisory lock, while preserving
+non-demo bookings. `/api/cron/demo-reset` is scheduled daily in `vercel.json`
+but returns 503 unless `DEMO_RESET_ENABLED=true`; it also requires Vercel's
+server-only `CRON_SECRET` Bearer header. The migration, seed, SQL verification
+and Cron activation have not been performed on a remote project.
+
 The database keeps quoted legacy camelCase columns because both existing
 frontends already consume that API. This is a deliberate compatibility
 exception to the normal Postgres snake_case convention; any rename must be a
 separate versioned API migration.
+
+## Feature05 evaluation and observability
+
+Run `npm run eval:ai` for 69 fixed offline cases. JSON and Markdown reports in
+`tests/ai/reports/offline.*` include applicable metric denominators, skipped
+metrics, execution failures, and limits of the deterministic model/retrieval
+adapters. This command does not call a paid model or the database.
+
+`npm run test:e2e` opens the actual website in Edge with mocked AI/feedback HTTP.
+The cabin pages still read the configured development database; no reservation
+is submitted. `npm run test:e2e:security` selects timeout and forbidden UI flows.
+Set `E2E_BROWSER_CHANNEL=chrome` when Chrome is installed instead. The managed
+server uses port 3100 and `.next-e2e`; `E2E_BASE_URL` selects an existing server.
+Use a development environment with synthetic cabins. Screenshots for success,
+empty results, timeout and denial are saved in `output/playwright/`; the JSON
+result and failure traces are in `test-results/`. These are HTTP fixture UI
+evidence: the screenshot UUID is synthetic and cannot be queried in `ai_runs`.
+
+The explicit `npm run eval:ai:live -- --live` runs ten fixed synthetic scenarios
+against the configured real model and approved `wild-oasis-dev` database. It
+may incur model charges. Business tools use in-memory inventory and policy
+fixtures and never create a booking; only telemetry and controlled harness
+feedback are written. Timestamped JSON/Markdown under `tests/ai/reports/live/`
+preserve failures, active/unattempted cases on interruption, prompt/model
+versions, trace IDs, P50/P95 (nearest rank), token counts and costs. Answer
+checks are deterministic heuristics, not a semantic judge or user satisfaction
+survey. Tool-failure recovery can pass its scenario while its run correctly has
+failed status. No price file means cost is unknown; copy
+`ai-prices.example.json` to a local file with verified model prices, source URL
+and date, then set `AI_PRICE_FILE` to report estimated USD cost. Non-stream
+generation has no TTFT; interrupted or unknown usage remains null.
+
+To investigate only failed fixed cases, use
+`npm run eval:ai:live -- --live --case live-05-empty --case live-09-tool-error`.
+Repeated `--case` flags select existing catalog IDs; unknown IDs fail before any
+generation. A selected retry reports its own denominator and the ten-case catalog
+size, and never replaces a prior full run. Error diagnostics retain only a bounded
+chain of allow-listed SDK error names and HTTP status codes, with no original
+messages, request bodies or credentials. A provider failure after earlier successful
+steps makes total usage/cost unknown; a fully completed tool-error recovery retains
+its measured usage.
+
+Before deploying the BFF, compare migration history and apply every unapplied
+file in `supabase/migrations/` in ascending filename order; do not cherry-pick a
+later migration while skipping its predecessors. This includes
+`20260918020821_ai_observability.sql` and, where not yet applied, the later
+Feature06 reset migration. Observability is already applied to the approved
+development project; do not replay it there. Run the rollback-only
+`supabase/tests/ai_observability.sql` permission checks with database admin
+credentials on development. Never pass a service key to either browser client.
+Set a stable server-only `AI_OBSERVABILITY_SECRET` across instances (the server
+Supabase key is the fallback), and configure `AI_ADMIN_ORIGIN` to the exact
+admin website origin for CORS, trace headers, and feedback.
+
+Only trusted `app_metadata.role=admin` can read runs/feedback through RLS;
+clients cannot insert either table or consume rate buckets. Server telemetry
+contains only trace UUID, controlled status/error codes, timing, token counts,
+tool names/error counts, and version identifiers. No prompts, answers, tool
+arguments, raw error messages, user IDs or credentials are stored. Feedback
+accepts a one-hour signed receipt bound to the trace/surface and a controlled
+rating. Trace IDs alone do not authorize feedback. Cached booking insights do
+not receive a fresh generation feedback receipt.
+
+Use `npm run ai:observe -- trace UUID` in a trusted server environment to inspect
+one real request and its feedback. A trace may be missing when bounded telemetry
+storage (1.5-second request / 1.6-second outer deadline) fails; this never replaces
+the original response. Feedback then returns a retryable error. Rate-limit
+storage has the same bounded timeout and fails closed for AI only: anonymous
+concierge traffic shares 20 requests/minute, each authenticated operations actor
+has 30/minute per surface; arbitrary forwarded IP headers cannot bypass this.
+429 includes `Retry-After`; 503 indicates the AI dependency is unavailable.
+Ordinary cabin filtering, reservation entry and staff booking screens remain
+available.
+
+`npm run ai:observe -- concurrency --live` verifies five simultaneous HTTP RPC
+requests against the approved development database with limit two. It saves
+safe per-request status/error codes and verifies exact temporary-bucket cleanup.
+It performs no business writes. `npm run ai:observe -- cleanup --apply` explicitly
+deletes runs older than 30 days (cascading feedback) and rate buckets older than
+one day. No scheduled cleanup is created automatically. Review retention and
+target environment before using that maintenance command.
+
+Cross-repository progress and human acceptance requirements are in
+[`FEATURE06_PROGRESS.md`](https://github.com/notjustkoala/the-wild-oasis/blob/codex/ai-hospitality-platform/docs/FEATURE06_PROGRESS.md).
+
+## Limitations and future work
+
+- There is no verified public URL, production smoke result, distributable demo
+  account, backup video or independent-reader acceptance yet.
+- Browser screenshots use HTTP fixtures; they do not prove provider, database or
+  production availability. The first real-model ten-scenario run was 8/10, with
+  both failures later passing separate one-case retries—not one 10/10 run.
+- Model cost remains unknown without a dated, sourced price file. No growth,
+  conversion, revenue or uptime claim is made.
+- Deterministic seed generation remains local-file-only and targets an empty
+  dataset. The fixed-provenance reset/Cron chain is versioned but default-disabled;
+  it is not evidence of an applied migration or active remote schedule.
+- Future work is to deploy the isolated demo stack, configure platform WAF or
+  distributed throttling, verify and activate the transactional reset in the
+  isolated Demo Project, record the privacy-reviewed fallback video and complete
+  human demo validation.

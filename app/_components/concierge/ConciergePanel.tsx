@@ -7,6 +7,7 @@ import {
   FormEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -18,6 +19,8 @@ import CabinComparison from "./CabinComparison";
 import CabinRecommendationCard from "./CabinRecommendationCard";
 import PolicyCitations from "./PolicyCitations";
 import ToolStatus from "./ToolStatus";
+import ResponseFeedback, { type ResponseReceipt } from "./ResponseFeedback";
+import Link from "next/link";
 
 const MAX_CONCIERGE_CLIENT_BODY_BYTES = 24_000;
 
@@ -48,13 +51,6 @@ export function prepareConciergeRequestMessages(
   }
   return selected;
 }
-
-const conciergeTransport = new DefaultChatTransport<ConciergeAgentUIMessage>({
-  api: "/api/ai/concierge",
-  prepareSendMessagesRequest: ({ messages }) => ({
-    body: { messages: prepareConciergeRequestMessages(messages) },
-  }),
-});
 
 const suggestions = [
   "A family of four, next weekend for three nights, under $1,200",
@@ -90,6 +86,18 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [wasCancelled, setWasCancelled] = useState(false);
+  const [receipt, setReceipt] = useState<ResponseReceipt | null>(null);
+  const conciergeTransport = useMemo(() => new DefaultChatTransport<ConciergeAgentUIMessage>({
+    api: "/api/ai/concierge",
+    prepareSendMessagesRequest: ({ messages }) => ({ body: { messages: prepareConciergeRequestMessages(messages) } }),
+    fetch: async (url, init) => {
+      setReceipt(null);
+      const response = await fetch(url, init);
+      const traceId = response.headers.get("X-AI-Trace-Id");
+      if (traceId && /^[0-9a-f-]{36}$/i.test(traceId)) setReceipt({ traceId, token: response.headers.get("X-AI-Feedback-Token") });
+      return response;
+    },
+  }), []);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -467,6 +475,8 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                   </button>
                 </div>
               ) : null}
+              {receipt ? <ResponseFeedback key={receipt.traceId} receipt={receipt} busy={busy} /> : null}
+              <Link href="/cabins" onClick={closePanel} className="inline-block text-sm underline">Browse cabins without AI</Link>
               <div ref={messagesEndRef} />
             </div>
 

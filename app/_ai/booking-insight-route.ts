@@ -1,4 +1,7 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
+import { enforceRateLimit, traceHeaders } from "@/app/_ai/observability/access";
+import { createRunObserver, type ErrorCode } from "@/app/_ai/observability/run";
 
 import { authorizeBookingInsightAdmin } from "@/app/_ai/booking-insight-auth";
 import { bookingInsightCors } from "@/app/_ai/booking-insight-cors";
@@ -143,6 +146,7 @@ export function createBookingInsightRouteHandlers(
       ok: true,
       bookingId,
       repository: repositoryFactory(authorization.client),
+      actorId: authorization.user.id,
       headers: cors.headers,
     } as const;
   }
@@ -161,44 +165,61 @@ export function createBookingInsightRouteHandlers(
   }
 
   async function POST(request: Request, context: RouteContext): Promise<Response> {
-    const prepared = await prepare(request, context);
-    if (!prepared.ok) return prepared.response;
+    const traceId = randomUUID();
+    const rejectedRun = createRunObserver({ surface: "booking-insight", model: "not-invoked", promptVersion: "booking-risk-v1", traceId });
+    async function rejected(response: Response, code: ErrorCode = "invalid-request") {
+      await rejectedRun.finish(response.status === 429 ? "rate-limited" : response.status < 500 ? "denied" : "failed", code);
+      response.headers.set("X-AI-Trace-Id", traceId);
+      const payload = await response.json();
+      return Response.json({ ...payload, traceId }, { status: response.status, headers: response.headers });
+    }
+    let prepared;
+    try { prepared = await prepare(request, context); }
+    catch { return rejected(json({ error: "The booking insight service is temporarily unavailable." }, 503, bookingInsightCors(request, env).headers), "provider-unavailable"); }
+    if (!prepared.ok) return rejected(prepared.response, "unauthorized");
     if (
       !request.headers
         .get("content-type")
         ?.toLowerCase()
         .startsWith("application/json")
     ) {
-      return json(
+      return rejected(json(
         { error: "Content-Type must be application/json." },
         415,
         prepared.headers
-      );
+      ));
     }
     const parsed = await readBoundedBookingInsightJson(request);
     if (!parsed.ok) {
-      return json({ error: parsed.message }, parsed.status, prepared.headers);
+      return rejected(json({ error: parsed.message }, parsed.status, prepared.headers));
     }
     const body = bookingInsightPostBodySchema.safeParse(parsed.body);
     if (!body.success) {
-      return json(
+      return rejected(json(
         { error: "Request body is invalid." },
         400,
         prepared.headers
-      );
+      ));
     }
+    const limit = await enforceRateLimit("booking-insight", prepared.actorId, { env });
+    if (!limit.ok) {
+      if (limit.retryAfter) prepared.headers.set("Retry-After", String(limit.retryAfter));
+      return rejected(json({ error: "AI insight is temporarily unavailable. Review the booking manually." }, limit.status, prepared.headers), limit.status === 429 ? "rate-limited" : "store-unavailable");
+    }
+    let generated = false;
     try {
       const view = await analyze(
         prepared.repository,
         prepared.bookingId,
         body.data,
-        { env }
+        { env, traceId, signal: request.signal, onGeneration: () => { generated = true; } }
       );
       const status =
         view.state === "pending" ? 202 : view.state === "failed" ? 503 : 200;
-      return json(publicView(view), status, prepared.headers);
+      if (generated) traceHeaders(traceId, "booking-insight").forEach((value, key) => prepared.headers.set(key, value));
+      return json({ ...publicView(view), ...(generated ? { traceId } : {}) }, status, prepared.headers);
     } catch (error) {
-      return errorResponse(error, prepared.headers);
+      return rejected(errorResponse(error, prepared.headers), "provider-unavailable");
     }
   }
 

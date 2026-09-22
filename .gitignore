@@ -17,6 +17,14 @@
 
 # next.js
 /.next/
+/.next-e2e/
+/test-results/
+/output/
+!/output/
+/output/*
+!/output/playwright/
+/output/playwright/*
+!/output/playwright/feature05-*.png
 /out/
 
 # production
@@ -33,6 +41,7 @@ yarn-error.log*
 
 # local env files
 .env*.local
+ai-prices.local.json
 
 # vercel
 .vercel

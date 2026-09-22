@@ -11,6 +11,7 @@ import { cabinTools } from "@/app/_ai/tools/cabin-tools";
 import { createPolicySearchTool } from "@/app/_ai/tools/policy-search";
 import policyConfig from "@/policy-rag.config.json";
 import { POLICY_ANSWER_INSTRUCTIONS } from "@/app/_ai/policies/policy-answer-instructions";
+import type { RunObserver } from "@/app/_ai/observability/run";
 
 export const conciergeTools = {
   ...cabinTools,
@@ -51,17 +52,20 @@ export function createConciergeAgent({
   tools = cabinTools,
   policySearchTool = conciergeTools.searchHotelPolicies,
   currentPolicyQuestion,
+  observer,
 }: {
   model?: LanguageModel;
   tools?: typeof cabinTools;
   policySearchTool?: typeof conciergeTools.searchHotelPolicies;
   currentPolicyQuestion?: string;
+  observer?: RunObserver;
 } = {}) {
   const enforcedPolicyQuestion = currentPolicyQuestion
     ?.trim()
     .slice(0, policyConfig.retrieval.maximumQuestionCharacters);
   return new ToolLoopAgent({
     id: "wild-oasis-concierge",
+    onStepEnd: observer?.step,
     model: model ?? resolveConciergeModel(),
     instructions: CONCIERGE_INSTRUCTIONS,
     tools: { ...tools, searchHotelPolicies: policySearchTool },

@@ -10,8 +10,15 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:ai": "vitest run tests/ai",
+    "eval:ai": "node scripts/eval-ai.mjs",
+    "eval:ai:live": "node scripts/live-ai.mjs",
+    "ai:observe": "node scripts/ai-observe.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:security": "playwright test --grep @security",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "docs:check": "node scripts/check-markdown-links.mjs",
+    "smoke:production": "node scripts/smoke-production.mjs",
     "seed:base": "node scripts/generate-base-seed.mjs",
     "seed:demo": "node scripts/generate-demo-data.mjs",
     "policies:check": "node scripts/check-policies.mjs",
@@ -34,6 +41,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.58.2",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "14.3.1",
     "@testing-library/user-event": "14.5.2",

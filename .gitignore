@@ -48,3 +48,5 @@ ai-prices.local.json
 
 # typescript
 *.tsbuildinfo
+
+.env*

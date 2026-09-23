@@ -1,0 +1,24 @@
+# Local secrets and Vercel linkage
+.env*
+.vercel/
+
+# Local build and dependency artifacts
+.next/
+.next-e2e/
+node_modules/
+*.tsbuildinfo
+
+# Test, evaluation, and generated evidence artifacts
+.playwright-cli/
+coverage/
+test-results/
+output/
+tests/
+supabase/
+
+# Repository-only material not needed by the Next.js runtime
+.git/
+.github/
+docs/
+starter/
+*.log

@@ -1,5 +1,5 @@
 import { createRunObserver } from "@/app/_ai/observability/run";
-import { enforceRateLimit, issueFeedbackToken, verifyFeedbackToken } from "@/app/_ai/observability/access";
+import { enforceRateLimit, issueFeedbackToken, RATE_LIMIT_GUARD_TIMEOUT_MS, verifyFeedbackToken } from "@/app/_ai/observability/access";
 const env = { NODE_ENV: "test", AI_OBSERVABILITY_SECRET: "fixture-secret-no-real-credentials" } as NodeJS.ProcessEnv;
 const trace = "00000000-0000-4000-8000-000000000005";
 describe("AI metadata and permission boundaries", () => {
@@ -84,6 +84,6 @@ describe("AI metadata and permission boundaries", () => {
     expect(await enforceRateLimit("concierge", undefined, { env, consume: async () => { throw new Error("private"); } })).toMatchObject({ ok: false, status: 503 });
   });
   it("bounds a hanging rate store", async () => {
-    vi.useFakeTimers(); try { const promise = enforceRateLimit("concierge", undefined, { env, consume: () => new Promise(() => {}) }); await vi.advanceTimersByTimeAsync(1_600); expect(await promise).toMatchObject({ status: 503 }); } finally { vi.useRealTimers(); }
+    vi.useFakeTimers(); try { const promise = enforceRateLimit("concierge", undefined, { env, consume: () => new Promise(() => {}) }); await vi.advanceTimersByTimeAsync(RATE_LIMIT_GUARD_TIMEOUT_MS); expect(await promise).toMatchObject({ status: 503 }); } finally { vi.useRealTimers(); }
   });
 });

@@ -3,6 +3,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { createPrivilegedSupabaseClient } from "@/app/_lib/supabase-server";
 import type { Surface } from "./run";
 
+export const RATE_LIMIT_RPC_TIMEOUT_MS = 4_500;
+export const RATE_LIMIT_GUARD_TIMEOUT_MS = 5_000;
+
 function secret(env = process.env) { return env.AI_OBSERVABILITY_SECRET || env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY; }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function digest(value: string, key: string) { return createHmac("sha256", key).update(value).digest("hex"); }
@@ -30,13 +33,13 @@ export async function enforceRateLimit(surface: Surface, actorId?: string, depen
   try {
     const consume = dependencies.consume ?? (async (key: string, limit: number) => {
       const client = createPrivilegedSupabaseClient();
-      const { data, error } = await client.rpc("consume_ai_rate_limit", { p_bucket: key, p_limit: limit, p_window_seconds: 60 }).abortSignal(AbortSignal.timeout(1_500));
+      const { data, error } = await client.rpc("consume_ai_rate_limit", { p_bucket: key, p_limit: limit, p_window_seconds: 60 }).abortSignal(AbortSignal.timeout(RATE_LIMIT_RPC_TIMEOUT_MS));
       if (error || !data) throw new Error("Unavailable");
       return data as { allowed: boolean; retry_after: number };
     });
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const result = await Promise.race([consume(bucket, surface === "concierge" ? 20 : 30), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Unavailable")), 1_600); })]);
+      const result = await Promise.race([consume(bucket, surface === "concierge" ? 20 : 30), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Unavailable")), RATE_LIMIT_GUARD_TIMEOUT_MS); })]);
       if (typeof result.allowed !== "boolean" || !Number.isFinite(result.retry_after)) throw new Error("Invalid response");
       return result.allowed ? { ok: true as const } : { ok: false as const, status: 429, retryAfter: Math.max(1, Math.ceil(result.retry_after)) };
     } finally { if (timer) clearTimeout(timer); }

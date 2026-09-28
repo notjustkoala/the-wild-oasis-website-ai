@@ -3,7 +3,7 @@ import "server-only";
 import { readBoundedConciergeJson, validateConciergeRequestBody } from "@/app/_ai/concierge-request";
 import { hasPolicyIntent, redactChinesePolicyIdentities } from "@/app/_ai/policies/policy-query-privacy";
 import { POLICY_EXPLANATION_SUFFIX } from "@/app/_ai/policies/policy-query-controls";
-import { addRelativeOperationsDateHint } from "@/app/_ai/operations-types";
+import { addRelativeOperationsDateHint, type RequestedInternalNoteDraft } from "@/app/_ai/operations-types";
 
 export const MAX_OPERATIONS_BODY_BYTES = 40_000;
 export const MAX_OPERATIONS_AGENT_TEXT_CHARS = 2_000;
@@ -58,6 +58,118 @@ const operationalCjkLookupTerms = new Set([
   "离店", "高风险", "有风险", "所有", "本周", "下周", "本月", "上月", "收入", "统计", "收入统计",
 ]);
 const SAFE_BOOKING_LOOKUP_FALLBACK = "Booking lookup requires a numeric bookingId; guest names are not sent to the AI.";
+const strictEnglishInternalNotePattern =
+  /^(?:add|create|write|draft)\s+(?:an?\s+)?(?:internal\s+)?note\s+(?:for\s+)?booking(?:\s*id)?\s*[:=#]?\s*#?([1-9]\d*)\s*(?:[:：-]\s*|\r?\n)([\s\S]+)$/iu;
+const strictChineseInternalNotePattern =
+  /^(?:添加|创建|写入|草拟)\s*(?:内部)?备注\s*[:：-]?\s*(?:booking(?:\s*id)?|订单|预订)\s*[:：=#]?\s*#?([1-9]\d*)\s*(?:[:：-]\s*|\r?\n)([\s\S]+)$/iu;
+const trailingCommandSeparatorPattern = /\r?\n|[,，.。!！?？:：;；]/gu;
+const englishStrongCommandSwitchPattern = /\s+(?:(?:and\s+)?then)\s+/giu;
+const chineseStrongCommandSwitchPattern = /(?:然后|并且|再)\s*/gu;
+const optionalEnglishSeparatedConnectorPattern = /^\s*(?:(?:(?:and\s+)?then|and)\s+)?/iu;
+const optionalChineseSeparatedConnectorPattern = /^\s*(?:(?:然后|并且|再|并)\s*)?/u;
+const englishOperationsActionPattern =
+  /^(?:please\s+)?(?:show|display|find|open|lookup|locate|search|retrieve|list|check|get|give|add|create|write|draft|approve|reject|compare|calculate|count|summarize)\b/iu;
+const englishCoreOperationsObjectPattern =
+  /^\s+(?:(?:me|for|the|an?|all|this|next|past|last|current|upcoming|unpaid|paid|cancelled|canceled|pending|high-risk|internal)\s+)*(?:bookings?|reservations?|arrivals?|details?|counts?|metrics?|revenue|payments?|status(?:es)?|risks?|cabins?|performance|nights?|approvals?|notes?)\b/iu;
+const englishPolicyObjectPattern =
+  /^\s+(?:(?:me|for)\s+)?(?:(?:the|an?)\s+)?(?:[a-z][a-z'-]{0,30}\s+){0,3}(?:polic(?:y|ies)|sops?)\b/iu;
+const englishOperationsObjectPatterns = [
+  englishCoreOperationsObjectPattern,
+  englishPolicyObjectPattern,
+] as const;
+const chineseOperationsActionPattern =
+  /^(?:请)?(?:查询|查找|查看|显示|打开|定位|搜索|列出|获取|添加|创建|写入|草拟|批准|拒绝|对比|比较|计算|统计)/u;
+const chineseCoreOperationsObjectPattern =
+  /^\s*(?:(?:本月|本周|下周|今天|明天|未来七天|未付款|已付款|已取消|取消|到店|高风险|有风险|所有|需要关注的|内部)\s*)*(?:订单|预订|到店订单|详情|数量|指标|收入|付款|支付|状态|风险|客舱|客舱表现|客舱绩效|房型表现|入住晚数|夜数|审批|批准请求|备注)/u;
+const chinesePolicyObjectPattern = /^\s*[\u3400-\u9fff]{0,12}(?:政策|SOP)/u;
+const chineseOperationsObjectPatterns = [
+  chineseCoreOperationsObjectPattern,
+  chinesePolicyObjectPattern,
+] as const;
+
+function startsWithOperationsCommand(
+  text: string,
+  actionPattern: RegExp,
+  objectPatterns: readonly RegExp[],
+) {
+  const action = actionPattern.exec(text);
+  return Boolean(
+    action && objectPatterns.some((pattern) => pattern.test(text.slice(action[0].length)))
+  );
+}
+
+function hasTrailingOperationsCommand(note: string) {
+  for (const separator of note.matchAll(trailingCommandSeparatorPattern)) {
+    const tail = note.slice((separator.index ?? 0) + separator[0].length);
+    const englishTail = tail.replace(optionalEnglishSeparatedConnectorPattern, "");
+    const chineseTail = tail.replace(optionalChineseSeparatedConnectorPattern, "");
+    if (
+      startsWithOperationsCommand(
+        englishTail,
+        englishOperationsActionPattern,
+        englishOperationsObjectPatterns,
+      ) || startsWithOperationsCommand(
+        chineseTail,
+        chineseOperationsActionPattern,
+        chineseOperationsObjectPatterns,
+      )
+    ) return true;
+  }
+
+  for (const commandSwitch of note.matchAll(englishStrongCommandSwitchPattern)) {
+    const tail = note.slice((commandSwitch.index ?? 0) + commandSwitch[0].length);
+    if (startsWithOperationsCommand(
+      tail,
+      englishOperationsActionPattern,
+      englishOperationsObjectPatterns,
+    )) return true;
+  }
+  for (const commandSwitch of note.matchAll(chineseStrongCommandSwitchPattern)) {
+    const tail = note.slice((commandSwitch.index ?? 0) + commandSwitch[0].length);
+    if (startsWithOperationsCommand(
+      tail,
+      chineseOperationsActionPattern,
+      chineseOperationsObjectPatterns,
+    )) return true;
+  }
+  return false;
+}
+
+export function parseRequestedInternalNoteDraft(text: string): RequestedInternalNoteDraft | undefined {
+  const normalized = text.trim();
+  const match = strictEnglishInternalNotePattern.exec(normalized) ?? strictChineseInternalNotePattern.exec(normalized);
+  if (!match) return undefined;
+
+  const bookingId = Number(match[1]);
+  const note = match[2].trim();
+  if (!Number.isSafeInteger(bookingId) || bookingId <= 0 || note.length < 1 || note.length > 500) {
+    return undefined;
+  }
+  if (hasTrailingOperationsCommand(note)) return undefined;
+  return { bookingId, note };
+}
+
+function parseRequestedInternalNoteFromRawEnvelope(body: unknown) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return undefined;
+  const envelope = body as { trigger?: unknown; messages?: unknown };
+  if (envelope.trigger === "regenerate-message") return undefined;
+  if (envelope.trigger !== undefined && envelope.trigger !== "submit-message") return undefined;
+  if (!Array.isArray(envelope.messages)) return undefined;
+
+  const lastMessage = envelope.messages.at(-1);
+  if (!lastMessage || typeof lastMessage !== "object" || Array.isArray(lastMessage)) return undefined;
+  const rawMessage = lastMessage as { role?: unknown; parts?: unknown };
+  if (rawMessage.role !== "user" || !Array.isArray(rawMessage.parts)) return undefined;
+
+  const rawTextParts: string[] = [];
+  for (const part of rawMessage.parts) {
+    if (!part || typeof part !== "object" || Array.isArray(part)) return undefined;
+    const rawPart = part as { type?: unknown; text?: unknown };
+    if (rawPart.type !== "text" || typeof rawPart.text !== "string") return undefined;
+    rawTextParts.push(rawPart.text);
+  }
+  return parseRequestedInternalNoteDraft(rawTextParts.join("\n"));
+}
 
 function removePolicyOverridePreamble(text: string) {
   const overridePrefix =
@@ -85,7 +197,7 @@ const safeOperationsSyntax = [
   // standalone digits or a suffix sliced from a longer identifier.
   /提前\s*(?:0|[1-9]\d{0,2})\s*(?:小时|分钟)/gu,
   /\[redacted\]/giu,
-  /__(?:BOOKING_ID|OPERATIONS_DATE|OPERATIONS_RELATIVE_DATE)_\d+__/gu,
+  /__(?:BOOKING_ID|OPERATIONS_DATE|OPERATIONS_RELATIVE_DATE|OPERATIONS_SAFE_PHRASE)_\d+__/gu,
   /\bbooking\s*id\b/giu,
   /\b(?:bookings?|reservations?)\b/giu,
   /(?:预订|订单)/gu,
@@ -191,6 +303,7 @@ export function sanitizeOperationsUserText(text: string) {
   const bookingIdTokens: string[] = [];
   const dateTokens: string[] = [];
   const relativeDateTokens: string[] = [];
+  const safePhraseTokens: string[] = [];
   const tokenForBookingId = (bookingId: string) => {
     const token = `__BOOKING_ID_${bookingIdTokens.length}__`;
     bookingIdTokens.push(bookingId);
@@ -204,6 +317,11 @@ export function sanitizeOperationsUserText(text: string) {
   const tokenForRelativeDate = (datePhrase: string) => {
     const token = `__OPERATIONS_RELATIVE_DATE_${relativeDateTokens.length}__`;
     relativeDateTokens.push(datePhrase);
+    return token;
+  };
+  const tokenForSafePhrase = (phrase: string) => {
+    const token = `__OPERATIONS_SAFE_PHRASE_${safePhraseTokens.length}__`;
+    safePhraseTokens.push(phrase);
     return token;
   };
   const redactNoteCommand = (value: string, pattern: RegExp) => value.replace(
@@ -227,6 +345,9 @@ export function sanitizeOperationsUserText(text: string) {
     cjkNoteCommandPattern
   );
   const tokenized = noteRedacted
+    // Protect only complete production-proven phrases. Arbitrary adjacent Han
+    // text remains visible to the fail-closed grammar and identity detectors.
+    .replace(/入住相关订单|需要关注的订单|对比|并列出/gu, (phrase) => tokenForSafePhrase(phrase))
     .replace(ordinaryBookingIdPattern, (_match, prefix: string, bookingId: string) =>
       `${prefix}${tokenForBookingId(bookingId)}`
     )
@@ -271,7 +392,8 @@ export function sanitizeOperationsUserText(text: string) {
   const restored = bounded
     .replace(/__BOOKING_ID_(\d+)__/g, (_token, index: string) => bookingIdTokens[Number(index)] ?? "[redacted]")
     .replace(/__OPERATIONS_DATE_(\d+)__/g, (_token, index: string) => dateTokens[Number(index)] ?? "[redacted]")
-    .replace(/__OPERATIONS_RELATIVE_DATE_(\d+)__/g, (_token, index: string) => relativeDateTokens[Number(index)] ?? "[redacted]");
+    .replace(/__OPERATIONS_RELATIVE_DATE_(\d+)__/g, (_token, index: string) => relativeDateTokens[Number(index)] ?? "[redacted]")
+    .replace(/__OPERATIONS_SAFE_PHRASE_(\d+)__/g, (_token, index: string) => safePhraseTokens[Number(index)] ?? "[redacted]");
 
   return restored.length > MAX_OPERATIONS_AGENT_TEXT_CHARS
     ? SAFE_BOOKING_LOOKUP_FALLBACK
@@ -287,11 +409,18 @@ export async function readOperationsRequest(request: Request, referenceDate = ne
   if (!parsed.ok) return parsed;
   const validated = validateConciergeRequestBody(parsed.body);
   if (!validated.ok) return { ok: false as const, status: 400 as const, message: validated.message };
+  // Validation establishes the envelope shape and bounds first. Binding then
+  // uses only the raw final submitted user message so regeneration or an
+  // assistant-tailed history can never resurrect an earlier private note.
+  const requestedInternalNoteDraft = parseRequestedInternalNoteFromRawEnvelope(parsed.body);
   const uiMessages = validated.uiMessages.map((message) => ({
     ...message,
     parts: message.parts.map((part) =>
       part.type === "text"
-        ? { ...part, text: addBoundedOperationsDateHint(sanitizeOperationsUserText(part.text), referenceDate, part.text) }
+        ? (() => {
+            const sanitizedText = sanitizeOperationsUserText(part.text);
+            return { ...part, text: addBoundedOperationsDateHint(sanitizedText, referenceDate, sanitizedText) };
+          })()
         : part
     ),
   }));
@@ -307,6 +436,7 @@ export async function readOperationsRequest(request: Request, referenceDate = ne
   return {
     ok: true as const,
     uiMessages,
+    requestedInternalNoteDraft,
     currentPolicyQuestion:
       currentUserText && hasPolicyIntent(currentUserText)
         ? currentUserText

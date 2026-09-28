@@ -1,19 +1,35 @@
 import { POST as concierge } from "@/app/api/ai/concierge/route";
 import { POST as operations } from "@/app/api/ai/admin/route";
 import { createBookingInsightRouteHandlers } from "@/app/_ai/booking-insight-route";
-const mocks = vi.hoisted(() => ({ persist: vi.fn(), limit: vi.fn(), authorize: vi.fn(), stream: vi.fn(), generate: vi.fn(), observer: null as any }));
+const mocks = vi.hoisted(() => ({ persist: vi.fn(), limit: vi.fn(), authorize: vi.fn(), stream: vi.fn(), generate: vi.fn(), observer: null as any, agentOptions: null as any }));
 vi.mock("@/app/_ai/observability/run", async original => { const actual = await original<typeof import("@/app/_ai/observability/run")>(); return { ...actual, createRunObserver: (options: any) => actual.createRunObserver({ ...options, persist: mocks.persist }) }; });
 vi.mock("@/app/_ai/observability/access", async original => ({ ...await original<typeof import("@/app/_ai/observability/access")>(), enforceRateLimit: mocks.limit }));
 vi.mock("@/app/_ai/providers/concierge-model", async original => ({ ...await original<typeof import("@/app/_ai/providers/concierge-model")>(), getConciergeProviderConfigurationError: () => null, resolveConciergeProviderConfiguration: () => ({ modelId: "fixture-model" }) }));
 vi.mock("@/app/_ai/operations-auth", () => ({ authorizeOperationsStaff: mocks.authorize }));
 vi.mock("@/app/_ai/agents/concierge-agent", () => ({ CONCIERGE_INSTRUCTIONS: "fixture", createConciergeAgent: (options: any) => { mocks.observer = options.observer; return {}; } }));
-vi.mock("@/app/_ai/agents/operations-agent", () => ({ OPERATIONS_INSTRUCTIONS: "fixture", createOperationsAgent: (options: any) => { mocks.observer = options.observer; return { tools: {}, generate: mocks.generate }; } }));
+vi.mock("@/app/_ai/agents/operations-agent", () => ({ OPERATIONS_INSTRUCTIONS: "fixture", createOperationsAgent: (options: any) => { mocks.observer = options.observer; mocks.agentOptions = options; return { tools: {}, generate: mocks.generate }; } }));
 vi.mock("ai", async original => ({ ...await original<typeof import("ai")>(), createAgentUIStreamResponse: mocks.stream }));
-function request(surface: string, options: { origin?: string; signal?: AbortSignal } = {}) {
-  return new Request(`http://localhost/api/ai/${surface}`, { method: "POST", signal: options.signal, headers: { "content-type": "application/json", accept: "application/json", ...(options.origin ? { origin: options.origin } : {}) }, body: JSON.stringify(surface === "insight" ? {} : { messages: [{ id: "fixture", role: "user", parts: [{ type: "text", text: "Show arrivals" }] }] }) });
+function collectPayloadStrings(value: unknown, seen = new WeakSet<object>()): string[] {
+  if (typeof value === "string") return [value];
+  if (value === null || typeof value !== "object" || seen.has(value)) return [];
+  seen.add(value);
+  return Object.values(value).flatMap((entry) => collectPayloadStrings(entry, seen));
+}
+function expectPayloadStringsNotToContain(payload: unknown, sensitiveValues: string[]) {
+  const payloadStrings = collectPayloadStrings(payload);
+  for (const sensitiveValue of sensitiveValues) {
+    const jsonEscapedValue = JSON.stringify(sensitiveValue).slice(1, -1);
+    for (const payloadString of payloadStrings) {
+      expect(payloadString).not.toContain(sensitiveValue);
+      expect(payloadString).not.toContain(jsonEscapedValue);
+    }
+  }
+}
+function request(surface: string, options: { origin?: string; signal?: AbortSignal; text?: string } = {}) {
+  return new Request(`http://localhost/api/ai/${surface}`, { method: "POST", signal: options.signal, headers: { "content-type": "application/json", accept: "application/json", ...(options.origin ? { origin: options.origin } : {}) }, body: JSON.stringify(surface === "insight" ? {} : { messages: [{ id: "fixture", role: "user", parts: [{ type: "text", text: options.text ?? "Show arrivals" }] }] }) });
 }
 describe("generation routes preserve trace and failure semantics", () => {
-  beforeEach(() => { vi.stubEnv("AI_OBSERVABILITY_SECRET", "fixture-secret"); mocks.persist.mockResolvedValue(true); mocks.limit.mockResolvedValue({ ok: true }); mocks.authorize.mockResolvedValue({ ok: true, client: {}, user: { id: "synthetic" } }); mocks.stream.mockRejectedValue(new Error("private@example.invalid")); mocks.generate.mockRejectedValue(new Error("private@example.invalid")); });
+  beforeEach(() => { vi.stubEnv("AI_OBSERVABILITY_SECRET", "fixture-secret"); mocks.agentOptions = null; mocks.persist.mockResolvedValue(true); mocks.limit.mockResolvedValue({ ok: true }); mocks.authorize.mockResolvedValue({ ok: true, client: {}, user: { id: "synthetic" } }); mocks.stream.mockRejectedValue(new Error("private@example.invalid")); mocks.generate.mockRejectedValue(new Error("private@example.invalid")); });
   afterEach(() => { vi.unstubAllEnvs(); });
   for (const [surface, post] of [["concierge", concierge], ["admin", operations]] as const) {
     it(`${surface}: rejects cross-origin with trace and no receipt`, async () => { const response = await post(request(surface, { origin: "https://evil.invalid" })); expect(response.status).toBe(403); expect(response.headers.get("X-AI-Trace-Id")).toBeTruthy(); expect(response.headers.has("X-AI-Feedback-Token")).toBe(false); expect(mocks.persist).toHaveBeenCalledWith(expect.objectContaining({ status: "denied" })); });
@@ -26,6 +42,42 @@ describe("generation routes preserve trace and failure semantics", () => {
   it("operations retains tool-error status even when the model produces final text", async () => {
     mocks.generate.mockImplementation(async () => { mocks.observer.step({ toolCalls: [{ toolName: "getArrivals" }], content: [{ type: "tool-error" }], usage: { inputTokens: 5, outputTokens: 1 } }); return { text: "Unable to retrieve arrivals.", finishReason: "stop", steps: [] }; });
     expect((await operations(request("admin"))).status).toBe(200); expect(mocks.persist).toHaveBeenCalledWith(expect.objectContaining({ status: "failed", error_code: "tool-error", tool_error_count: 1 }));
+  });
+  it("operations binds an exact note only in agent options and never persists its text", async () => {
+    const exactNote = "Call 张三\n  preserve exact spacing";
+    const proposal = {
+      kind: "internal-note-approval",
+      approvalId: "approval-json-route",
+      bookingId: 699,
+      note: exactNote,
+      status: "pending",
+      sourceIds: ["approval:approval-json-route", "booking:699"],
+      facts: ["Employee approval is required before writing."],
+      truncated: false,
+    };
+    mocks.generate.mockResolvedValue({
+      text: "Approval required.",
+      finishReason: "stop",
+      steps: [{
+        stepNumber: 0,
+        text: "",
+        toolCalls: [{ toolName: "addBookingInternalNote", input: { bookingId: 699 } }],
+        toolResults: [{ toolName: "addBookingInternalNote", output: proposal }],
+      }],
+    });
+    const response = await operations(request("admin", {
+      text: `Draft an internal note for booking 699:\n${exactNote}`,
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.agentOptions.requestedInternalNoteDraft).toEqual({ bookingId: 699, note: exactNote });
+    expectPayloadStringsNotToContain(mocks.generate.mock.calls, [exactNote, "preserve exact spacing"]);
+    expect(await response.json()).toMatchObject({
+      steps: [{
+        toolCalls: [{ toolName: "addBookingInternalNote", input: { bookingId: 699 } }],
+        toolResults: [{ toolName: "addBookingInternalNote", output: proposal }],
+      }],
+    });
+    expectPayloadStringsNotToContain(mocks.persist.mock.calls, [exactNote, "preserve exact spacing"]);
   });
   it("booking insight rejects early paths with trace, while cache hits have no generation receipt", async () => {
     const analyze = vi.fn().mockResolvedValue({ state: "fresh", insight: null });

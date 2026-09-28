@@ -1,16 +1,38 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { convertToModelMessages, createAgentUIStreamResponse, simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
+import type { LanguageModelV4StreamPart } from "@ai-sdk/provider";
 
 import { operationsCors } from "@/app/_ai/operations-cors";
 import { createOperationsAgent, createOperationsInstructions, OPERATIONS_INSTRUCTIONS } from "@/app/_ai/agents/operations-agent";
 import {
   MAX_OPERATIONS_AGENT_TEXT_CHARS,
+  parseRequestedInternalNoteDraft,
   readOperationsRequest,
   sanitizeOperationsUserText,
 } from "@/app/_ai/operations-request";
 import { authorizeOperationsStaff } from "@/app/_ai/operations-auth";
+import { redactChinesePolicyIdentities } from "@/app/_ai/policies/policy-query-privacy";
 import { extractExplicitOperationsDateRange, resolveRelativeOperationsDateRange } from "@/app/_ai/operations-types";
+
+function collectPayloadStrings(value: unknown, seen = new WeakSet<object>()): string[] {
+  if (typeof value === "string") return [value];
+  if (value === null || typeof value !== "object" || seen.has(value)) return [];
+  seen.add(value);
+  return Object.values(value).flatMap((entry) => collectPayloadStrings(entry, seen));
+}
+
+function expectPayloadStringsNotToContain(payload: unknown, sensitiveValues: string[]) {
+  const payloadStrings = collectPayloadStrings(payload);
+  for (const sensitiveValue of sensitiveValues) {
+    const jsonEscapedValue = JSON.stringify(sensitiveValue).slice(1, -1);
+    for (const payloadString of payloadStrings) {
+      expect(payloadString).not.toContain(sensitiveValue);
+      expect(payloadString).not.toContain(jsonEscapedValue);
+    }
+  }
+}
 
 describe("operations BFF security contract", () => {
   const env = { NODE_ENV: "production", AI_ADMIN_ORIGIN: "https://admin.example.com" } as NodeJS.ProcessEnv;
@@ -18,7 +40,7 @@ describe("operations BFF security contract", () => {
   it("threads the authorized bearer client into policy-capable operations tools", () => {
     const agentSource = readFileSync(resolve(process.cwd(), "app/_ai/agents/operations-agent.ts"), "utf8");
     const toolsSource = readFileSync(resolve(process.cwd(), "app/_ai/operations-tools.ts"), "utf8");
-    expect(agentSource).toMatch(/createOperationsTools\(\{ client, actorId \}\)/);
+    expect(agentSource).toMatch(/createOperationsTools\(\{ client, actorId, requestedInternalNoteDraft \}\)/);
     expect(toolsSource).toMatch(/createPolicySearchTool\(\{[\s\S]*client: client as PolicyRpcClient/);
     expect(toolsSource).not.toMatch(/privilegedSupabase|service[_-]?role/i);
     const routeSource = readFileSync(resolve(process.cwd(), "app/api/ai/admin/route.ts"), "utf8");
@@ -145,6 +167,42 @@ describe("operations BFF security contract", () => {
       from: "2026-08-26",
       to: "2026-08-26",
     });
+  });
+
+  it("resolves this month in UTC, including leap-year February", () => {
+    expect(resolveRelativeOperationsDateRange("Compare bookings this month", new Date("2026-09-27T23:59:59.000Z"))).toEqual({
+      from: "2026-09-01",
+      to: "2026-09-30",
+    });
+    expect(resolveRelativeOperationsDateRange("对比本月订单", new Date("2024-02-29T12:00:00.000Z"))).toEqual({
+      from: "2024-02-01",
+      to: "2024-02-29",
+    });
+  });
+
+  it("preserves the known-safe Chinese operations request and resolves its month", async () => {
+    const text = "对比本月入住相关订单和收入，并列出需要关注的订单。";
+    expect(redactChinesePolicyIdentities(text)).toBe(text);
+    for (const safeFragment of ["对比", "本月", "订单", "入住相关订单", "和收入", "并列出", "需要关注的订单"]) {
+      expect(sanitizeOperationsUserText(safeFragment)).toBe(safeFragment);
+    }
+    expect(sanitizeOperationsUserText(text)).toBe(text);
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text }] }] }),
+    }), new Date("2026-09-27T12:00:00.000Z"));
+    expect(result.ok).toBe(true);
+    if (result.ok && result.uiMessages[0].parts[0].type === "text") {
+      expect(result.uiMessages[0].parts[0].text).toContain(text);
+      expect(result.uiMessages[0].parts[0].text).toContain("from=2026-09-01, to=2026-09-30");
+    }
+  });
+
+  it("fails closed when a Chinese name is inserted into the safe monthly request", () => {
+    const safe = sanitizeOperationsUserText("对比本月张三入住相关订单和收入，并列出需要关注的订单。");
+    expect(safe).not.toContain("张三");
+    expect(safe === "Booking lookup requires a numeric bookingId; guest names are not sent to the AI." || safe.includes("[redacted]")).toBe(true);
   });
 
   it("validates exactly two explicit dates within the 366-day bound", () => {
@@ -291,6 +349,340 @@ describe("operations BFF security contract", () => {
     const longId = sanitizeOperationsUserText("Draft an internal note bookingId=1234567890: Email Alice");
     expect(longId).toContain("bookingId=1234567890");
     expect(longId).not.toContain("Alice");
+  });
+
+  it("strictly binds only a complete latest-turn internal-note command", async () => {
+    const exactNote = "First line\n  preserve   internal whitespace\nThird line";
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [
+        { role: "user", parts: [{ type: "text", text: "Draft an internal note for booking 12: historical private note" }] },
+        { role: "assistant", parts: [{ type: "text", text: "Earlier response" }] },
+        { role: "user", parts: [{ type: "text", text: `  添加内部备注：订单699\n${exactNote}  ` }] },
+      ] }),
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.requestedInternalNoteDraft).toEqual({ bookingId: 699, note: exactNote });
+      const serializedMessages = JSON.stringify(result.uiMessages);
+      expect(serializedMessages).toContain("bookingId=699");
+      expect(serializedMessages).toContain("[redacted]");
+      expectPayloadStringsNotToContain(result.uiMessages, [exactNote, "preserve   internal whitespace"]);
+      expect(serializedMessages).not.toContain("historical private note");
+    }
+  });
+
+  it("never binds a note from an earlier user turn", async () => {
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [
+        { role: "user", parts: [{ type: "text", text: "Draft an internal note for booking 699: old secret" }] },
+        { role: "assistant", parts: [{ type: "text", text: "Earlier response" }] },
+        { role: "user", parts: [{ type: "text", text: "Show booking 699" }] },
+      ] }),
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.requestedInternalNoteDraft).toBeUndefined();
+  });
+
+  it("never rebinds a historical note during regeneration", async () => {
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        trigger: "regenerate-message",
+        messages: [{
+          role: "user",
+          parts: [{ type: "text", text: "Draft an internal note for booking 699: historical secret" }],
+        }],
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.requestedInternalNoteDraft).toBeUndefined();
+  });
+
+  it("never binds when the raw conversation has an assistant tail", async () => {
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        trigger: "submit-message",
+        messages: [
+          { role: "user", parts: [{ type: "text", text: "Draft an internal note for booking 699: historical secret" }] },
+          { role: "assistant", parts: [{ type: "text", text: "Previous response" }] },
+        ],
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.requestedInternalNoteDraft).toBeUndefined();
+  });
+
+  it("builds a strict note from raw text parts without canonical whitespace loss", async () => {
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        trigger: "submit-message",
+        messages: [{
+          role: "user",
+          parts: [
+            { type: "text", text: "  Draft an internal note for booking 699: First line  " },
+            { type: "text", text: "  indented second line\nthird  line  " },
+          ],
+        }],
+      }),
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.requestedInternalNoteDraft).toEqual({
+        bookingId: 699,
+        note: "First line  \n  indented second line\nthird  line",
+      });
+      expect(JSON.stringify(result.uiMessages)).not.toContain("indented second line");
+    }
+  });
+
+  it.each([
+    "Draft an internal note: missing booking",
+    "Draft an internal note for booking 0: invalid",
+    "Draft an internal note for booking -1: invalid",
+    "Draft an internal note for booking 999999999999999999999999: invalid",
+    "Draft an internal note for booking 699:   ",
+    `Draft an internal note for booking 699: ${"x".repeat(501)}`,
+    "Draft an internal note for booking 699 missing delimiter",
+    "Draft an internal note for booking 699: private; Show booking 1",
+    "Draft an internal note for booking 699: private, show booking 1",
+    "Draft an internal note for booking 699: private. Please list bookings",
+    "Draft an internal note for booking 699: private; then show booking 1",
+    "Draft an internal note for booking 699: private, and show booking 1",
+    "Draft an internal note for booking 699: private then show booking 1",
+    "Draft an internal note for booking 699: private; compare bookings this month",
+    "Draft an internal note for booking 699: private\nand calculate revenue",
+    "Draft an internal note for booking 699: private; display booking 1",
+    "Draft an internal note for booking 699: private; add an internal note for booking 700: second",
+    "Draft an internal note for booking 699: private; search the pet policy",
+    "Draft an internal note for booking 699: private; retrieve the staff SOP",
+    "Draft an internal note for booking 699: private; search the cancellation policy",
+    "Draft an internal note for booking 699: private; check refund policy",
+    "Draft an internal note for booking 699: private; retrieve exception SOP",
+    "添加内部备注：订单699：私密；查询订单1",
+    "添加内部备注：订单699：私密。查询订单1",
+    "添加内部备注：订单699：私密，列出订单1",
+    "添加内部备注：订单699：私密；然后查询订单1",
+    "添加内部备注：订单699：私密；并且列出订单1",
+    "添加内部备注：订单699：私密然后查询订单1",
+    "添加内部备注：订单699：私密；比较本月订单",
+    "添加内部备注：订单699：私密；添加备注：订单700：第二条",
+    "添加内部备注：订单699：私密；查询宠物政策",
+    "添加内部备注：订单699：私密；查询员工SOP",
+    "添加内部备注：订单699：私密；查询取消政策",
+    "添加内部备注：订单699：私密；查找退款政策",
+    "添加内部备注：订单699：私密；获取例外SOP",
+  ])("does not bind a malformed note command: %s", (text) => {
+    expect(parseRequestedInternalNoteDraft(text)).toBeUndefined();
+  });
+
+  it("keeps natural conjunctions that do not introduce an operations command", () => {
+    expect(parseRequestedInternalNoteDraft(
+      "Draft an internal note for booking 699: Call the front desk and confirm payment.",
+    )).toEqual({
+      bookingId: 699,
+      note: "Call the front desk and confirm payment.",
+    });
+  });
+
+  it.each([
+    [
+      "Draft an internal note for booking 699: Call the front desk and get an update.",
+      "Call the front desk and get an update.",
+    ],
+    [
+      "Draft an internal note for booking 699: Contact the guest and check availability.",
+      "Contact the guest and check availability.",
+    ],
+    [
+      "添加内部备注：订单699：联系前台并查询付款状态。",
+      "联系前台并查询付款状态。",
+    ],
+    [
+      "Draft an internal note for booking 699: Follow up tomorrow and compare 2026-09-01 to 2026-09-02",
+      "Follow up tomorrow and compare 2026-09-01 to 2026-09-02",
+    ],
+  ])("binds a natural note without treating conjunctions as command switches: %s", (text, note) => {
+    expect(parseRequestedInternalNoteDraft(text)).toEqual({ bookingId: 699, note });
+  });
+
+  it("does not derive date hints from raw internal-note text", async () => {
+    const exactNote = "Follow up tomorrow and compare 2026-09-01 to 2026-09-02";
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: `Draft an internal note for booking 699: ${exactNote}` }] }] }),
+    }), new Date("2026-09-27T12:00:00.000Z"));
+    expect(result.ok).toBe(true);
+    if (result.ok && result.uiMessages[0].parts[0].type === "text") {
+      expect(result.requestedInternalNoteDraft?.note).toBe(exactNote);
+      expect(result.uiMessages[0].parts[0].text).not.toContain("Server-");
+      expect(result.uiMessages[0].parts[0].text).not.toContain(exactNote);
+    }
+  });
+
+  it("keeps exact note text out of every model call while retaining it in the raw UI proposal", async () => {
+    const exactNote = "Call 张三 at 09:00\n  Preserve this spacing";
+    const approvalId = "approval-private-id";
+    const parsed = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: `Draft an internal note for booking 699:\n${exactNote}` }] }] }),
+    }));
+    if (!parsed.ok || !parsed.requestedInternalNoteDraft) throw new Error("Expected a bound note draft");
+
+    const builder: Record<string, any> = {
+      select: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      maybeSingle: vi.fn(async () => ({ data: { id: 699 }, error: null })),
+    };
+    const rpc = vi.fn(async () => ({
+      data: { approval_id: approvalId, booking_id: 699, note: exactNote, status: "pending" },
+      error: null,
+    }));
+    let calls = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async (options) => {
+        calls += 1;
+        const serialized = JSON.stringify(options);
+        expectPayloadStringsNotToContain(options, [exactNote, "Preserve this spacing", approvalId]);
+        if (calls === 1) {
+          expect(options.toolChoice).toEqual({ type: "tool", toolName: "addBookingInternalNote" });
+          expect(options.tools?.map((candidate) => candidate.name)).toEqual(["addBookingInternalNote"]);
+          expect(serialized).not.toContain('"note"');
+          return {
+            content: [{ type: "tool-call" as const, toolCallId: "draft-note", toolName: "addBookingInternalNote", input: JSON.stringify({ bookingId: 699 }) }],
+            finishReason: { unified: "tool-calls" as const, raw: undefined },
+            usage: { inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 1, text: 1, reasoning: undefined } },
+            warnings: [],
+          };
+        }
+        expect(options.tools?.map((candidate) => candidate.name)).not.toContain("addBookingInternalNote");
+        return {
+          content: [{ type: "text" as const, text: "Approval is required before saving." }],
+          finishReason: { unified: "stop" as const, raw: undefined },
+          usage: { inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 1, text: 1, reasoning: undefined } },
+          warnings: [],
+        };
+      },
+    });
+    const client = { from: vi.fn(() => builder), rpc };
+    const agent = createOperationsAgent({
+      client,
+      actorId: "staff-1",
+      model,
+      requestedInternalNoteDraft: parsed.requestedInternalNoteDraft,
+    });
+    const result = await agent.generate({
+      messages: await convertToModelMessages(parsed.uiMessages, { tools: agent.tools, ignoreIncompleteToolCalls: true }),
+    });
+
+    expect(calls).toBe(2);
+    expect(rpc).toHaveBeenCalledWith("create_booking_ai_approval", { p_booking_id: 699, p_note: exactNote });
+    expect(result.steps[0].toolResults[0].output).toMatchObject({
+      approvalId,
+      bookingId: 699,
+      note: exactNote,
+      status: "pending",
+    });
+  });
+
+  it("streams the raw approval proposal to the UI while every model step sees only the safe tool summary", async () => {
+    const exactNote = "Call 张三 after 09:00\n  Preserve stream spacing";
+    const approvalId = "approval-stream-private-id";
+    const parsed = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{
+        role: "user",
+        parts: [{ type: "text", text: `Draft an internal note for booking 699:\n${exactNote}` }],
+      }] }),
+    }));
+    if (!parsed.ok || !parsed.requestedInternalNoteDraft) throw new Error("Expected a bound note draft");
+
+    const usage = {
+      inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+      outputTokens: { total: 1, text: 1, reasoning: undefined },
+    };
+    let calls = 0;
+    const model = new MockLanguageModelV4({
+      doStream: async (options) => {
+        calls += 1;
+        expectPayloadStringsNotToContain(options, [exactNote, "Preserve stream spacing", approvalId]);
+        const chunks: LanguageModelV4StreamPart[] = calls === 1
+          ? [
+              { type: "stream-start", warnings: [] },
+              { type: "tool-call", toolCallId: "stream-draft", toolName: "addBookingInternalNote", input: JSON.stringify({ bookingId: 699 }) },
+              { type: "finish", usage, finishReason: { unified: "tool-calls", raw: undefined } },
+            ]
+          : [
+              { type: "stream-start", warnings: [] },
+              { type: "text-start", id: "response-text" },
+              { type: "text-delta", id: "response-text", delta: "Approval is required before saving." },
+              { type: "text-end", id: "response-text" },
+              { type: "finish", usage, finishReason: { unified: "stop", raw: undefined } },
+            ];
+        return {
+          stream: simulateReadableStream({
+            chunks,
+            initialDelayInMs: null,
+            chunkDelayInMs: null,
+          }),
+        };
+      },
+    });
+    const builder: Record<string, any> = {
+      select: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      maybeSingle: vi.fn(async () => ({ data: { id: 699 }, error: null })),
+    };
+    const rpc = vi.fn(async () => ({
+      data: { approval_id: approvalId, booking_id: 699, note: exactNote, status: "pending" },
+      error: null,
+    }));
+    const agent = createOperationsAgent({
+      client: { from: vi.fn(() => builder), rpc },
+      actorId: "staff-1",
+      model,
+      requestedInternalNoteDraft: parsed.requestedInternalNoteDraft,
+    });
+
+    const response = await createAgentUIStreamResponse({
+      agent,
+      uiMessages: parsed.uiMessages,
+    });
+    const streamEvents = (await response.text())
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => line.slice("data: ".length))
+      .filter((line) => line !== "[DONE]")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const toolOutput = streamEvents.find((event) => event.type === "tool-output-available");
+
+    expect(toolOutput).toMatchObject({
+      type: "tool-output-available",
+      toolCallId: "stream-draft",
+      output: {
+        kind: "internal-note-approval",
+        approvalId,
+        bookingId: 699,
+        note: exactNote,
+        status: "pending",
+      },
+    });
+    expect(model.doStreamCalls).toHaveLength(2);
+    for (const call of model.doStreamCalls) {
+      expectPayloadStringsNotToContain(call, [exactNote, "Preserve stream spacing", approvalId]);
+    }
+    expect(JSON.stringify(model.doStreamCalls[1])).toContain("An internal-note approval draft was created.");
   });
 
   it.each([

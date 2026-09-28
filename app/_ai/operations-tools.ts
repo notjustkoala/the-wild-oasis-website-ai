@@ -20,11 +20,13 @@ import {
   stableSourceIds,
   type BookingSummary,
   type OperationsToolResult,
+  type RequestedInternalNoteDraft,
 } from "@/app/_ai/operations-types";
 
 type OperationsToolDependencies = {
   client: { from: (table: string) => unknown; rpc?: PolicyRpcClient["rpc"] };
   actorId: string;
+  requestedInternalNoteDraft?: RequestedInternalNoteDraft;
   now?: () => Date;
 };
 
@@ -95,7 +97,8 @@ function rangeFacts(range: { from: string; to: string }) {
   return [`Bookings from ${range.from} through ${range.to} (inclusive).`];
 }
 
-export function createOperationsTools({ client, actorId, now = () => new Date() }: OperationsToolDependencies) {
+export function createOperationsTools({ client, actorId, requestedInternalNoteDraft, now = () => new Date() }: OperationsToolDependencies) {
+  let internalNoteDraftConsumed = false;
   const searchHotelPolicies = createPolicySearchTool({
     client: client as PolicyRpcClient,
     allowedScopes: ["public", "staff"],
@@ -292,16 +295,42 @@ export function createOperationsTools({ client, actorId, now = () => new Date() 
 
   const addBookingInternalNote = tool({
     description: "Draft an internal follow-up note for one booking. This creates an approval request only; it never changes booking data.",
-    inputSchema: z.object({ bookingId: z.number().int().positive(), note: z.string().trim().min(1).max(500) }).strict(),
-    execute: async ({ bookingId, note }) => {
+    inputSchema: z.object({ bookingId: z.number().int().positive() }).strict(),
+    execute: async ({ bookingId }) => {
+      if (!requestedInternalNoteDraft || requestedInternalNoteDraft.bookingId !== bookingId) {
+        throw new Error("No matching server-bound internal note draft was requested.");
+      }
+      if (internalNoteDraftConsumed) {
+        throw new Error("The server-bound internal note draft was already consumed.");
+      }
+      // Consume synchronously before the first await. This closes same-step
+      // parallel calls and intentionally prevents retries after query failure.
+      internalNoteDraftConsumed = true;
       const { data, error } = await query(client, "bookings")
         .select('id')
         .eq("id", bookingId)
         .maybeSingle();
       if (error || !data) throw new Error("Booking not found.");
-      const proposal = await createOperationsApproval({ client, actorId, bookingId, note, now });
+      const proposal = await createOperationsApproval({
+        client,
+        actorId,
+        bookingId,
+        note: requestedInternalNoteDraft.note,
+        now,
+      });
       return proposal;
     },
+    toModelOutput: ({ output }) => ({
+      type: "json",
+      value: {
+        kind: output.kind,
+        bookingId: output.bookingId,
+        status: output.status,
+        facts: ["An internal-note approval draft was created. Employee approval is still required before the note is saved."],
+        sourceIds: [`booking:${output.bookingId}`],
+        truncated: false,
+      },
+    }),
   });
 
   return { getArrivals, getBookingMetrics, getCabinPerformance, getBookingRisks, getBookingDetails, addBookingInternalNote, searchHotelPolicies } satisfies ToolSet;

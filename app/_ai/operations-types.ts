@@ -22,6 +22,8 @@ export const internalNoteDraftSchema = z
   })
   .strict();
 
+export type RequestedInternalNoteDraft = z.infer<typeof internalNoteDraftSchema>;
+
 export type OperationsDateRange = z.infer<typeof operationsDateRangeSchema>;
 
 export const OPERATIONS_RESULT_LIMITS = {
@@ -141,6 +143,16 @@ export function resolveRelativeOperationsDateRange(text: string, referenceDate: 
     date.setUTCDate(date.getUTCDate() + 1);
     const dateText = operationsDateText(date);
     return { from: dateText, to: dateText };
+  }
+  if (/\bthis\s+month\b/u.test(normalized) || normalized.includes("本月")) {
+    const year = reference.getUTCFullYear();
+    const month = reference.getUTCMonth();
+    const firstDay = new Date(Date.UTC(year, month, 1));
+    const lastDay = new Date(Date.UTC(year, month + 1, 0));
+    return {
+      from: operationsDateText(firstDay),
+      to: operationsDateText(lastDay),
+    };
   }
 
   const match = /\bnext\s+(\d{1,3})\s+days?\b|(?:未来|接下来)\s*(\d{1,3}|七)\s*天/u.exec(normalized);

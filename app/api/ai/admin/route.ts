@@ -40,6 +40,7 @@ export async function POST(request: Request) {
       actorId: authorization.user.id,
       referenceDate,
       currentPolicyQuestion: parsed.currentPolicyQuestion,
+      requestedInternalNoteDraft: parsed.requestedInternalNoteDraft,
       observer: run,
     });
     if (request.headers.get("accept")?.includes("application/json")) {

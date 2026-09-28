@@ -9,9 +9,28 @@ import {
   OPERATIONS_MAX_ROWS,
   OPERATIONS_RESULT_LIMITS,
 } from "@/app/_ai/operations-types";
+import { parseRequestedInternalNoteDraft } from "@/app/_ai/operations-request";
 import { createOperationsTools } from "@/app/_ai/operations-tools";
 
 type QueryResult = { data: unknown; error: unknown };
+
+function collectPayloadStrings(value: unknown, seen = new WeakSet<object>()): string[] {
+  if (typeof value === "string") return [value];
+  if (value === null || typeof value !== "object" || seen.has(value)) return [];
+  seen.add(value);
+  return Object.values(value).flatMap((entry) => collectPayloadStrings(entry, seen));
+}
+
+function expectPayloadStringsNotToContain(payload: unknown, sensitiveValues: string[]) {
+  const payloadStrings = collectPayloadStrings(payload);
+  for (const sensitiveValue of sensitiveValues) {
+    const jsonEscapedValue = JSON.stringify(sensitiveValue).slice(1, -1);
+    for (const payloadString of payloadStrings) {
+      expect(payloadString).not.toContain(sensitiveValue);
+      expect(payloadString).not.toContain(jsonEscapedValue);
+    }
+  }
+}
 
 function chain(result: QueryResult, { paginate = false } = {}): Record<string, any> {
   let selectedRange: { from: number; to: number } | null = null;
@@ -84,6 +103,149 @@ describe("operations copilot fixed tools", () => {
   it("registers policy search beside the existing operations tools", () => {
     const tools = createOperationsTools({ client: { from: vi.fn(), rpc: vi.fn() }, actorId: "actor-1" });
     expect(Object.keys(tools)).toContain("searchHotelPolicies");
+  });
+  it("requires an exact server-bound note before any query or RPC", async () => {
+    const from = vi.fn();
+    const rpc = vi.fn();
+    const unbound = createOperationsTools({ client: { from, rpc }, actorId: "actor-1" });
+    await expect(unbound.addBookingInternalNote.execute!({ bookingId: 699 }, {} as never)).rejects.toThrow(/matching server-bound/i);
+
+    const wrongId = createOperationsTools({
+      client: { from, rpc },
+      actorId: "actor-1",
+      requestedInternalNoteDraft: { bookingId: 699, note: "exact private note" },
+    });
+    await expect(wrongId.addBookingInternalNote.execute!({ bookingId: 700 }, {} as never)).rejects.toThrow(/matching server-bound/i);
+    expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "Draft an internal note for booking 699: private then show booking 1",
+    "Draft an internal note for booking 699: private; compare bookings this month",
+    "Draft an internal note for booking 699: private\nand calculate revenue",
+    "Draft an internal note for booking 699: private; display booking 1",
+    "Draft an internal note for booking 699: private; add an internal note for booking 700: second",
+    "Draft an internal note for booking 699: private; search the pet policy",
+    "Draft an internal note for booking 699: private; retrieve the staff SOP",
+    "Draft an internal note for booking 699: private; search the cancellation policy",
+    "Draft an internal note for booking 699: private; check refund policy",
+    "Draft an internal note for booking 699: private; retrieve exception SOP",
+    "添加内部备注：订单699：私密然后查询订单1",
+    "添加内部备注：订单699：私密；比较本月订单",
+    "添加内部备注：订单699：私密；添加备注：订单700：第二条",
+    "添加内部备注：订单699：私密；查询宠物政策",
+    "添加内部备注：订单699：私密；查询员工SOP",
+    "添加内部备注：订单699：私密；查询取消政策",
+    "添加内部备注：订单699：私密；查找退款政策",
+    "添加内部备注：订单699：私密；获取例外SOP",
+  ])("rejects a trailing operations command before any query or RPC: %s", async (text) => {
+    const from = vi.fn();
+    const rpc = vi.fn();
+    const tools = createOperationsTools({
+      client: { from, rpc },
+      actorId: "actor-1",
+      requestedInternalNoteDraft: parseRequestedInternalNoteDraft(text),
+    });
+
+    await expect(
+      tools.addBookingInternalNote.execute!({ bookingId: 699 }, {} as never),
+    ).rejects.toThrow(/matching server-bound/i);
+    expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("consumes a bound note synchronously so parallel and later calls cannot duplicate it", async () => {
+    const builder = chain({ data: { id: 699 }, error: null });
+    const from = vi.fn(() => builder);
+    const rpc = vi.fn().mockResolvedValue({
+      data: { approval_id: "approval-one-shot", booking_id: 699, note: "exact private note", status: "pending" },
+      error: null,
+    });
+    const tools = createOperationsTools({
+      client: { from, rpc },
+      actorId: "actor-1",
+      requestedInternalNoteDraft: { bookingId: 699, note: "exact private note" },
+    });
+
+    const [first, second] = await Promise.allSettled([
+      tools.addBookingInternalNote.execute!({ bookingId: 699 }, {} as never),
+      tools.addBookingInternalNote.execute!({ bookingId: 699 }, {} as never),
+    ]);
+    expect(first.status).toBe("fulfilled");
+    expect(second).toMatchObject({ status: "rejected", reason: expect.objectContaining({ message: expect.stringMatching(/already consumed/i) }) });
+    await expect(tools.addBookingInternalNote.execute!({ bookingId: 699 }, {} as never)).rejects.toThrow(/already consumed/i);
+    expect(from).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reopen a consumed note when the first booking query fails", async () => {
+    const builder = chain({ data: null, error: new Error("query failed") });
+    const from = vi.fn(() => builder);
+    const rpc = vi.fn();
+    const tools = createOperationsTools({
+      client: { from, rpc },
+      actorId: "actor-1",
+      requestedInternalNoteDraft: { bookingId: 699, note: "exact private note" },
+    });
+
+    await expect(tools.addBookingInternalNote.execute!({ bookingId: 699 }, {} as never)).rejects.toThrow(/booking not found/i);
+    await expect(tools.addBookingInternalNote.execute!({ bookingId: 699 }, {} as never)).rejects.toThrow(/already consumed/i);
+    expect(from).toHaveBeenCalledTimes(1);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("sends the exact bound note to the approval RPC but only a safe summary to the model", async () => {
+    const note = "First line\n  exact internal spacing";
+    const builder = chain({ data: { id: 699 }, error: null });
+    const rpc = vi.fn().mockResolvedValue({
+      data: { approval_id: "approval-secret", booking_id: 699, note, status: "pending" },
+      error: null,
+    });
+    const tools = createOperationsTools({
+      client: { from: vi.fn(() => builder), rpc },
+      actorId: "actor-1",
+      requestedInternalNoteDraft: { bookingId: 699, note },
+      now: () => new Date("2026-09-27T00:00:00.000Z"),
+    });
+    const output = await tools.addBookingInternalNote.execute!({ bookingId: 699 }, {} as never) as any;
+    expect(rpc).toHaveBeenCalledWith("create_booking_ai_approval", { p_booking_id: 699, p_note: note });
+    expect(output).toMatchObject({ approvalId: "approval-secret", bookingId: 699, note });
+
+    const modelOutput = await tools.addBookingInternalNote.toModelOutput!({
+      toolCallId: "tool-1",
+      input: { bookingId: 699 },
+      output,
+    });
+    expect(modelOutput).toMatchObject({
+      type: "json",
+      value: { kind: "internal-note-approval", bookingId: 699, status: "pending" },
+    });
+    expectPayloadStringsNotToContain(modelOutput, [note, "exact internal spacing", "approval-secret"]);
+  });
+
+  it("trims note boundaries before validating and sends an exact 500-character note", async () => {
+    const note = "x".repeat(500);
+    const requestedInternalNoteDraft = parseRequestedInternalNoteDraft(
+      `Draft an internal note for booking 699:   ${note}`,
+    );
+    expect(requestedInternalNoteDraft).toEqual({ bookingId: 699, note });
+
+    const builder = chain({ data: { id: 699 }, error: null });
+    const rpc = vi.fn().mockResolvedValue({
+      data: { approval_id: "approval-500", booking_id: 699, note, status: "pending" },
+      error: null,
+    });
+    const tools = createOperationsTools({
+      client: { from: vi.fn(() => builder), rpc },
+      actorId: "actor-1",
+      requestedInternalNoteDraft,
+    });
+    await tools.addBookingInternalNote.execute!({ bookingId: 699 }, {} as never);
+    expect(rpc).toHaveBeenCalledWith("create_booking_ai_approval", {
+      p_booking_id: 699,
+      p_note: note,
+    });
   });
   it("rejects malformed and overlong date ranges", () => {
     expect(() => assertOperationsDateRange({ from: "2026-02-30", to: "2026-03-01" })).toThrow();

@@ -2,11 +2,12 @@ import { convertToModelMessages, createAgentUIStreamResponse } from "ai";
 
 import { createOperationsAgent, OPERATIONS_INSTRUCTIONS } from "@/app/_ai/agents/operations-agent";
 import { observedRoute } from "@/app/_ai/observability/route";
-import { CONCIERGE_TIMEOUT, createConciergeAbortRecoveryTransform } from "@/app/_ai/concierge-stream";
+import { CONCIERGE_GENERATE_TIMEOUT, CONCIERGE_TIMEOUT, createConciergeAbortRecoveryTransform } from "@/app/_ai/concierge-stream";
 import { authorizeOperationsStaff } from "@/app/_ai/operations-auth";
 import { operationsCors } from "@/app/_ai/operations-cors";
 import { readOperationsRequest } from "@/app/_ai/operations-request";
 import { getConciergeProviderConfigurationError } from "@/app/_ai/providers/concierge-model";
+import { FALLBACK_GENERATION_ERROR_DIAGNOSTIC, safeGenerationErrorDiagnostic } from "@/app/_ai/observability/error-diagnostic";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 100;
@@ -34,6 +35,8 @@ export async function POST(request: Request) {
   const limited = await observation.limit(authorization.user.id);
   if (limited) return limited;
   run.watch(request.signal);
+  const generationStartedAt = Date.now();
+  const mode = request.headers.get("accept")?.includes("application/json") ? "generate" : "stream";
   try {
     const agent = createOperationsAgent({
       client: authorization.client,
@@ -43,7 +46,7 @@ export async function POST(request: Request) {
       requestedInternalNoteDraft: parsed.requestedInternalNoteDraft,
       observer: run,
     });
-    if (request.headers.get("accept")?.includes("application/json")) {
+    if (mode === "generate") {
       const modelMessages = await convertToModelMessages(parsed.uiMessages, {
         tools: agent.tools,
         ignoreIncompleteToolCalls: true,
@@ -51,7 +54,7 @@ export async function POST(request: Request) {
       const result = await agent.generate({
         messages: modelMessages,
         abortSignal: request.signal,
-        timeout: CONCIERGE_TIMEOUT,
+        timeout: CONCIERGE_GENERATE_TIMEOUT,
       });
       await run.finish(result.finishReason === "error" ? "failed" : "completed", result.finishReason === "error" ? "provider-unavailable" : null);
       return json({
@@ -89,7 +92,27 @@ export async function POST(request: Request) {
     cors.headers.set("Cache-Control", "no-store");
     return new Response(response.body, { status: response.status, headers: cors.headers });
   } catch (error) {
-    const timeout = error instanceof Error && /timeout|abort/i.test(error.name);
+    let diagnostic = FALLBACK_GENERATION_ERROR_DIAGNOSTIC;
+    try {
+      diagnostic = safeGenerationErrorDiagnostic(error, request.signal.aborted);
+    } catch {
+      // Keep the response path stable even if diagnostic extraction regresses.
+    }
+    const timeout = diagnostic.code === "timeout";
+    try {
+      console.error(JSON.stringify({
+        level: "error",
+        event: "operations-generation-failed",
+        route: "/api/ai/admin",
+        surface: "operations",
+        traceId: run.traceId,
+        mode,
+        ...diagnostic,
+        durationMs: Math.max(0, Date.now() - generationStartedAt),
+      }));
+    } catch {
+      // Diagnostic logging must never replace the safe client response.
+    }
     return fail("The operations copilot is temporarily unavailable. Continue with Bookings or Dashboard.", timeout ? 504 : 503, request.signal.aborted ? "cancelled" : timeout ? "timeout" : "provider-unavailable", request.signal.aborted ? "cancelled" : timeout ? "timeout" : "failed");
   }
 }

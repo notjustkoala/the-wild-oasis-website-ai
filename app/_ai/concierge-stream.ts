@@ -8,6 +8,14 @@ export const CONCIERGE_TIMEOUT = {
   toolMs: 20_000,
 } as const;
 
+// Non-streaming generation supports total, per-step, and tool deadlines, but
+// not streaming-only first-chunk or inter-chunk deadlines.
+export const CONCIERGE_GENERATE_TIMEOUT = {
+  totalMs: CONCIERGE_TIMEOUT.totalMs,
+  stepMs: CONCIERGE_TIMEOUT.stepMs,
+  toolMs: CONCIERGE_TIMEOUT.toolMs,
+} as const;
+
 export const CONCIERGE_RECOVERABLE_ERROR =
   "The concierge took too long to respond. Please retry your request.";
 

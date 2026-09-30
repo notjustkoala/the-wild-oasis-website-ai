@@ -199,6 +199,131 @@ describe("operations BFF security contract", () => {
     }
   });
 
+  it.each([
+    "到店情况",
+    "并说明",
+    "统计口径",
+    "2026年9月1日至2026年9月30日",
+    "请查询2026年9月1日至2026年9月30日",
+    "请查询2026年9月1日至2026年9月30日的订单",
+    "订单、收入、到店情况和高风险订单",
+    "并说明统计口径",
+  ])("accepts the bounded Production Chinese fragment: %s", (safeFragment) => {
+    expect(sanitizeOperationsUserText(safeFragment)).toBe(safeFragment);
+  });
+
+  it("preserves the Production explicit-date Chinese operations request and adds a validated range", async () => {
+    const fallback = "Booking lookup requires a numeric bookingId; guest names are not sent to the AI.";
+    const text = "请查询2026年9月1日至2026年9月30日的订单、收入、到店情况和高风险订单，并说明统计口径。";
+    expect(sanitizeOperationsUserText(text)).toBe(text);
+    for (const unsupportedFragment of ["情况", "并", "说明", "口径"]) {
+      expect(sanitizeOperationsUserText(unsupportedFragment)).toBe(fallback);
+    }
+    expect(sanitizeOperationsUserText(text.replace("到店情况", "到店情况张三"))).toBe(fallback);
+
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text }] }] }),
+    }), new Date("2026-09-30T12:00:00.000Z"));
+    expect(result.ok).toBe(true);
+    if (result.ok && result.uiMessages[0].parts[0].type === "text") {
+      expect(result.uiMessages[0].parts[0].text).toContain(text);
+      expect(result.uiMessages[0].parts[0].text).toContain(
+        "[Server-validated date range: from=2026-09-01, to=2026-09-30"
+      );
+      expect(result.uiMessages[0].parts[0].text).not.toContain(fallback);
+    }
+  });
+
+  it.each([
+    ["invalid day", "请查询2026年2月30日至2026年8月31日的订单"],
+    ["invalid month", "请查询2026年13月1日至2026年8月31日的订单"],
+    ["reversed range", "请查询2026年9月30日至2026年9月1日的订单"],
+    ["range over 366 days", "请查询2025年1月1日至2026年1月2日的订单"],
+    ["ambiguous single date", "请查询2026年9月1日的订单"],
+  ])("fails closed before model context for a Chinese explicit date with %s", async (_caseName, text) => {
+    const fallback = "Booking lookup requires a numeric bookingId; guest names are not sent to the AI.";
+    expect(sanitizeOperationsUserText(text)).toBe(fallback);
+
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text }] }] }),
+    }), new Date("2026-09-30T12:00:00.000Z"));
+    expect(result.ok).toBe(true);
+    if (result.ok && result.uiMessages[0].parts[0].type === "text") {
+      const modelText = result.uiMessages[0].parts[0].text;
+      expect(modelText).toBe(fallback);
+      expect(modelText).not.toContain(text);
+      expect(modelText).not.toMatch(/\d{4}年\d{1,2}月\d{1,2}日/u);
+    }
+  });
+
+  it("lets the Production Chinese aggregate request call the three structured tools without network access", async () => {
+    const text = "请查询2026年9月1日至2026年9月30日的订单、收入、到店情况和高风险订单，并说明统计口径。";
+    const parsed = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text }] }] }),
+    }), new Date("2026-09-30T12:00:00.000Z"));
+    if (!parsed.ok) throw new Error("Expected an accepted operations request.");
+
+    const builder: Record<string, any> = {
+      select: vi.fn(() => builder),
+      gte: vi.fn(() => builder),
+      lt: vi.fn(() => builder),
+      neq: vi.fn(() => builder),
+      order: vi.fn(() => builder),
+      limit: vi.fn(async () => ({ data: [], error: null })),
+    };
+    let calls = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        calls += 1;
+        return calls === 1
+          ? {
+              content: ["getBookingMetrics", "getArrivals", "getBookingRisks"].map((toolName) => ({
+                type: "tool-call" as const,
+                toolCallId: `call-${toolName}`,
+                toolName,
+                input: JSON.stringify({ from: "2026-09-01", to: "2026-09-30" }),
+              })),
+              finishReason: { unified: "tool-calls" as const, raw: undefined },
+              usage: { inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 1, text: 1, reasoning: undefined } },
+              warnings: [],
+            }
+          : {
+              content: [{ type: "text" as const, text: "已按各工具口径汇总。" }],
+              finishReason: { unified: "stop" as const, raw: undefined },
+              usage: { inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 1, text: 1, reasoning: undefined } },
+              warnings: [],
+            };
+      },
+    });
+    const from = vi.fn(() => builder);
+    const agent = createOperationsAgent({
+      client: { from },
+      actorId: "staff-fixture",
+      model,
+      referenceDate: new Date("2026-09-30T12:00:00.000Z"),
+    });
+    const result = await agent.generate({
+      messages: await convertToModelMessages(parsed.uiMessages, {
+        tools: agent.tools,
+        ignoreIncompleteToolCalls: true,
+      }),
+    });
+
+    expect(result.steps[0].toolCalls.map((call) => call.toolName).sort()).toEqual([
+      "getArrivals",
+      "getBookingMetrics",
+      "getBookingRisks",
+    ]);
+    expect(result.steps[0].toolResults).toHaveLength(3);
+    expect(from).toHaveBeenCalledTimes(3);
+  });
+
   it("fails closed when a Chinese name is inserted into the safe monthly request", () => {
     const safe = sanitizeOperationsUserText("对比本月张三入住相关订单和收入，并列出需要关注的订单。");
     expect(safe).not.toContain("张三");
@@ -214,6 +339,10 @@ describe("operations BFF security contract", () => {
       from: "2026-08-25",
       to: "2026-08-31",
     });
+    expect(extractExplicitOperationsDateRange("查询 2026年9月1日 至 2026年9月30日 的到店订单")).toEqual({
+      from: "2026-09-01",
+      to: "2026-09-30",
+    });
     expect(extractExplicitOperationsDateRange("2026-01-01 through 2027-01-01")).toEqual({
       from: "2026-01-01",
       to: "2027-01-01",
@@ -222,6 +351,10 @@ describe("operations BFF security contract", () => {
     expect(extractExplicitOperationsDateRange("2026-08-31 through 2026-08-25")).toBeNull();
     expect(extractExplicitOperationsDateRange("arrivals on 2026-08-25")).toBeNull();
     expect(extractExplicitOperationsDateRange("2026-02-30 through 2026-08-31")).toBeNull();
+    expect(extractExplicitOperationsDateRange("2026年2月30日至2026年8月31日")).toBeNull();
+    expect(extractExplicitOperationsDateRange("2026年13月1日至2026年8月31日")).toBeNull();
+    expect(extractExplicitOperationsDateRange("2026年9月30日至2026年9月1日")).toBeNull();
+    expect(extractExplicitOperationsDateRange("2025年1月1日至2026年1月2日")).toBeNull();
     expect(extractExplicitOperationsDateRange("2026-08-25 through 2026-08-31 and 2026-09-01")).toBeNull();
   });
 
@@ -1030,6 +1163,32 @@ describe("operations BFF security contract", () => {
     if (result.ok && result.uiMessages[0].parts[0].type === "text") {
       expect(result.uiMessages[0].parts[0].text.length).toBeLessThanOrEqual(MAX_OPERATIONS_AGENT_TEXT_CHARS);
       expect(result.uiMessages[0].parts[0].text).not.toMatch(/__(?:BOOKING_ID|OPERATIONS_DATE|OPERATIONS_RELATIVE_DATE)_/u);
+    }
+  });
+
+  it("never emits a partial Chinese date when a validated hint forces a boundary cut", async () => {
+    const hint = "\n[Server-validated date range: from=2026-09-01, to=2026-09-30 (inclusive). Use these exact bounded dates without asking the employee to restate them.]";
+    const modelTextCutAt = MAX_OPERATIONS_AGENT_TEXT_CHARS - hint.length;
+    const dateRange = "2026年9月1日至2026年9月30日";
+    const prefixLength = modelTextCutAt - 5;
+    const prefix = `${"Show ".repeat(Math.floor(prefixLength / 5))}${" ".repeat(prefixLength % 5)}`;
+    const text = `${prefix}${dateRange} bookings`;
+    expect(prefixLength).toBeLessThan(modelTextCutAt);
+    expect(prefixLength + dateRange.length).toBeGreaterThan(modelTextCutAt);
+    expect(text.length).toBeLessThanOrEqual(MAX_OPERATIONS_AGENT_TEXT_CHARS);
+    expect(sanitizeOperationsUserText(text)).toBe(text);
+
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text }] }] }),
+    }), new Date("2026-09-30T12:00:00.000Z"));
+    expect(result.ok).toBe(true);
+    if (result.ok && result.uiMessages[0].parts[0].type === "text") {
+      const modelText = result.uiMessages[0].parts[0].text;
+      expect(modelText.length).toBeLessThanOrEqual(MAX_OPERATIONS_AGENT_TEXT_CHARS);
+      expect(modelText).not.toMatch(/2026年|9月|\d+日/u);
+      expect(modelText.endsWith(hint)).toBe(true);
     }
   });
 

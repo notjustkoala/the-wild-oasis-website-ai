@@ -6,7 +6,7 @@ import { createOperationsTools } from "@/app/_ai/operations-tools";
 import type { PolicyRpcClient } from "@/app/_ai/policies/policy-repository";
 import { isPolicyExplanationOnlyRequest } from "@/app/_ai/policies/policy-query-controls";
 import { parseOperationsDate, resolveRelativeOperationsDateRange, type RequestedInternalNoteDraft } from "@/app/_ai/operations-types";
-import { resolveConciergeModel } from "@/app/_ai/providers/concierge-model";
+import { CONCIERGE_MODEL_MAX_RETRIES, resolveConciergeModel } from "@/app/_ai/providers/concierge-model";
 import policyConfig from "@/policy-rag.config.json";
 import { POLICY_ANSWER_INSTRUCTIONS } from "@/app/_ai/policies/policy-answer-instructions";
 import type { RunObserver } from "@/app/_ai/observability/run";
@@ -140,7 +140,8 @@ export function createOperationsAgent({
         : undefined;
     },
     stopWhen: isStepCount(8),
-    maxRetries: 2,
+    maxRetries: CONCIERGE_MODEL_MAX_RETRIES,
+    reasoning: "low",
     maxOutputTokens: 1_200,
   });
 }

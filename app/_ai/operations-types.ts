@@ -167,18 +167,25 @@ export function resolveRelativeOperationsDateRange(text: string, referenceDate: 
 }
 
 /**
- * Validate an explicitly supplied pair of ISO dates without guessing which
- * date the employee intended. Only exactly two date tokens are accepted.
+ * Validate an explicitly supplied pair of supported date tokens without
+ * guessing which date the employee intended. Chinese dates are normalized to
+ * ISO, and only exactly two date tokens are accepted.
  */
 export function extractExplicitOperationsDateRange(text: string, maxDays = 366): OperationsDateRange | null {
-  const matches = text.match(/\b\d{4}-\d{2}-\d{2}\b/g) ?? [];
+  const matches = text.match(/(?<!\d)(?:\d{4}-\d{2}-\d{2}|\d{4}年\d{1,2}月\d{1,2}日)(?!\d)/g) ?? [];
   if (matches.length !== 2) return null;
-  const from = parseOperationsDate(matches[0]);
-  const to = parseOperationsDate(matches[1]);
+  const normalized = matches.map((value) => {
+    const chineseDate = /^(\d{4})年(\d{1,2})月(\d{1,2})日$/u.exec(value);
+    return chineseDate
+      ? `${chineseDate[1]}-${chineseDate[2].padStart(2, "0")}-${chineseDate[3].padStart(2, "0")}`
+      : value;
+  });
+  const from = parseOperationsDate(normalized[0]);
+  const to = parseOperationsDate(normalized[1]);
   if (!from || !to || to < from) return null;
   const days = Math.floor((to.getTime() - from.getTime()) / 86_400_000) + 1;
   if (days > maxDays) return null;
-  return { from: matches[0], to: matches[1] };
+  return { from: normalized[0], to: normalized[1] };
 }
 
 /** Add a deterministic date hint to the sanitized user message for the model. */

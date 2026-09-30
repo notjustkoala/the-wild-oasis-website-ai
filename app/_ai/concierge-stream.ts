@@ -12,7 +12,10 @@ export const CONCIERGE_TIMEOUT = {
 // not streaming-only first-chunk or inter-chunk deadlines.
 export const CONCIERGE_GENERATE_TIMEOUT = {
   totalMs: CONCIERGE_TIMEOUT.totalMs,
-  stepMs: CONCIERGE_TIMEOUT.stepMs,
+  // Leave headroom below both the total deadline and the 100-second route
+  // duration while allowing a retried non-streaming provider step to exceed
+  // the stream's first-chunk budget.
+  stepMs: 80_000,
   toolMs: CONCIERGE_TIMEOUT.toolMs,
 } as const;
 

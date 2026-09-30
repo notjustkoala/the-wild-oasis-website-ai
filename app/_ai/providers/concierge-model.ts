@@ -6,8 +6,9 @@ import { createGateway, type LanguageModel } from "ai";
 import { createProxyAwareFetch } from "@/app/_lib/server-fetch";
 
 export const DEFAULT_AI_PROVIDER = "google" as const;
-export const DEFAULT_GOOGLE_CONCIERGE_MODEL = "gemini-3.6-flash";
+export const DEFAULT_GOOGLE_CONCIERGE_MODEL = "gemini-3.8-flash";
 export const DEFAULT_GATEWAY_CONCIERGE_MODEL = "openai/gpt-5.6-terra";
+export const CONCIERGE_MODEL_MAX_RETRIES = 4;
 
 export type ConciergeProvider = "google" | "gateway";
 

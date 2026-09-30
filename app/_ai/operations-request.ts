@@ -3,7 +3,11 @@ import "server-only";
 import { readBoundedConciergeJson, validateConciergeRequestBody } from "@/app/_ai/concierge-request";
 import { hasPolicyIntent, redactChinesePolicyIdentities } from "@/app/_ai/policies/policy-query-privacy";
 import { POLICY_EXPLANATION_SUFFIX } from "@/app/_ai/policies/policy-query-controls";
-import { addRelativeOperationsDateHint, type RequestedInternalNoteDraft } from "@/app/_ai/operations-types";
+import {
+  addRelativeOperationsDateHint,
+  extractExplicitOperationsDateRange,
+  type RequestedInternalNoteDraft,
+} from "@/app/_ai/operations-types";
 
 export const MAX_OPERATIONS_BODY_BYTES = 40_000;
 export const MAX_OPERATIONS_AGENT_TEXT_CHARS = 2_000;
@@ -46,6 +50,9 @@ const bareCjkNameLookupPattern =
   /(^|[\s，,;。！？!?])([\u3400-\u9fff]{2,4})(?=的(?:预订|订单))/gu;
 const relativeOperationsDatePhrasePattern =
   /\b(?:today|tomorrow)(?:['’]s)?\b|\b(?:next|past|last)\s+[1-9]\d{0,2}\s+(?:days?|weeks?|months?|years?)\b|\bthis\s+(?:week|month|year)\b|(?:未来|接下来)\s*(?:[1-9]\d{0,2}|七)\s*天|(?:今天|明天|未来七天|本周|下周|本月|上月)/giu;
+const explicitOperationsDateTokenPattern =
+  /(?<!\d)(?:\d{4}-\d{2}-\d{2}|\d{4}年\d{1,2}月\d{1,2}日)(?!\d)/gu;
+const chineseExplicitDateTokenPattern = /(?<!\d)\d{4}年\d{1,2}月\d{1,2}日(?!\d)/u;
 const operationalLatinLookupWords = new Set([
   "active", "all", "arrival", "arrivals", "booking", "bookings", "cabin", "cabins", "cancelled", "canceled",
   "checked", "count", "current", "detail", "details", "find", "for", "guest", "guests", "locate", "lookup",
@@ -214,7 +221,7 @@ const safeOperationsSyntax = [
   /\b(?:for|from|to|through|on|in|the|with|between|and|of|at|during|within|by|as|a|an|me)\b/giu,
   /\b(?:name|e-?mail|phone|telephone|mobile|observations?)\b/giu,
   /(?:舱房表现|收入统计|特殊需求|特殊要求|高风险|有风险|未付款|已付款|已取消|取消|到店|离店|所有|指标|统计|收入|付款|状态|详情|汇总|总计|风险|预订|订单|舱房|宾客|客户|备注|审批|运营|注意)/gu,
-  /(?:添加|创建|写入|草拟|批准|拒绝|帮我查|查询|查找|查看|显示|打开|定位|搜索|请查|列出|获取|查)/gu,
+  /(?:添加|创建|写入|草拟|批准|拒绝|帮我查|请查询|查询|查找|查看|显示|打开|定位|搜索|请查|列出|获取|查)/gu,
   /(?:姓名|名字|邮箱|邮件|电话|手机号|观察|留言|内部)/gu,
   /(?:客人|想知道|要求|免除|临时|严重|流程|提前|申请|支持)/gu,
   /(?:酒店|政策|规定|规则|员工|异常|处理|例外|豁免|减免|退款|费用|收费|扣款|早餐|饮食|过敏|无障碍|宠物|泳池|救生员|允许|免费|可靠|依据)/gu,
@@ -262,7 +269,7 @@ function safeStructuredPrefix(text: string, maxLength: number) {
   let cutAt = maxLength;
   const structuredValues = [
     /(?:\bbooking(?:\s*id)?|预订|订单)\s*(?:[:：=#]\s*)?#?\s*[1-9]\d*/giu,
-    /\b\d{4}-\d{2}-\d{2}\b/gu,
+    new RegExp(explicitOperationsDateTokenPattern.source, explicitOperationsDateTokenPattern.flags),
     new RegExp(relativeOperationsDatePhrasePattern.source, relativeOperationsDatePhrasePattern.flags),
   ];
   for (const pattern of structuredValues) {
@@ -344,14 +351,23 @@ export function sanitizeOperationsUserText(text: string) {
     redactNoteCommand(policyNormalized, freeformNoteCommandPattern),
     cjkNoteCommandPattern
   );
+  // Chinese explicit dates are a newly supported model-facing syntax. They
+  // are allowed only as one validated pair; otherwise fail closed instead of
+  // restoring an invalid, reversed, ambiguous, or over-broad range.
+  if (
+    chineseExplicitDateTokenPattern.test(noteRedacted) &&
+    !extractExplicitOperationsDateRange(noteRedacted)
+  ) {
+    return SAFE_BOOKING_LOOKUP_FALLBACK;
+  }
   const tokenized = noteRedacted
     // Protect only complete production-proven phrases. Arbitrary adjacent Han
     // text remains visible to the fail-closed grammar and identity detectors.
-    .replace(/入住相关订单|需要关注的订单|对比|并列出/gu, (phrase) => tokenForSafePhrase(phrase))
+    .replace(/入住相关订单|需要关注的订单|统计口径|到店情况|并列出|并说明|对比/gu, (phrase) => tokenForSafePhrase(phrase))
     .replace(ordinaryBookingIdPattern, (_match, prefix: string, bookingId: string) =>
       `${prefix}${tokenForBookingId(bookingId)}`
     )
-    .replace(/\b\d{4}-\d{2}-\d{2}\b/gu, (date) => tokenForDate(date))
+    .replace(explicitOperationsDateTokenPattern, (date) => tokenForDate(date))
     // Protect only complete, allow-listed relative-date phrases. This keeps
     // CJK dates and today/tomorrow possessives out of the deliberately broad
     // fail-closed name detectors without protecting arbitrary nearby words.

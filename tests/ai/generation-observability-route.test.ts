@@ -55,9 +55,10 @@ describe("generation routes preserve trace and failure semantics", () => {
     }));
     expect(mocks.generate.mock.calls[0][0].timeout).toEqual({
       totalMs: CONCIERGE_TIMEOUT.totalMs,
-      stepMs: CONCIERGE_TIMEOUT.stepMs,
+      stepMs: 80_000,
       toolMs: CONCIERGE_TIMEOUT.toolMs,
     });
+    expect(CONCIERGE_GENERATE_TIMEOUT.stepMs).toBeLessThan(CONCIERGE_GENERATE_TIMEOUT.totalMs);
     expect(mocks.generate.mock.calls[0][0].timeout).not.toHaveProperty("firstChunkMs");
     expect(mocks.generate.mock.calls[0][0].timeout).not.toHaveProperty("chunkMs");
 
@@ -67,6 +68,13 @@ describe("generation routes preserve trace and failure semantics", () => {
       timeout: CONCIERGE_TIMEOUT,
       abortSignal: expect.any(AbortSignal),
     }));
+    expect(CONCIERGE_TIMEOUT).toEqual({
+      totalMs: 90_000,
+      stepMs: 60_000,
+      firstChunkMs: 60_000,
+      chunkMs: 30_000,
+      toolMs: 20_000,
+    });
   });
   it("operations logs only allow-listed diagnostics for nested provider failures", async () => {
     const sensitiveQuestion = "Show private@example.invalid and secret guest details";

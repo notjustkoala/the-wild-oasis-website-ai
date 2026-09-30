@@ -5,7 +5,7 @@ import {
   type LanguageModel,
 } from "ai";
 
-import { resolveConciergeModel } from "@/app/_ai/providers/concierge-model";
+import { CONCIERGE_MODEL_MAX_RETRIES, resolveConciergeModel } from "@/app/_ai/providers/concierge-model";
 import { supabase } from "@/app/_lib/supabase";
 import { cabinTools } from "@/app/_ai/tools/cabin-tools";
 import { createPolicySearchTool } from "@/app/_ai/tools/policy-search";
@@ -86,7 +86,7 @@ export function createConciergeAgent({
         ? { activeTools: CONCIERGE_TOOLS_AFTER_POLICY_SEARCH }
         : undefined,
     stopWhen: isStepCount(8),
-    maxRetries: 2,
+    maxRetries: CONCIERGE_MODEL_MAX_RETRIES,
     maxOutputTokens: 900,
   });
 }

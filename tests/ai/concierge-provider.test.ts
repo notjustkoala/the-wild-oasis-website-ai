@@ -1,5 +1,6 @@
 import {
   ConciergeProviderConfigurationError,
+  CONCIERGE_MODEL_MAX_RETRIES,
   DEFAULT_AI_PROVIDER,
   DEFAULT_GATEWAY_CONCIERGE_MODEL,
   DEFAULT_GOOGLE_CONCIERGE_MODEL,
@@ -23,7 +24,8 @@ describe("concierge provider resolver", () => {
       provider: "google",
       modelId: DEFAULT_GOOGLE_CONCIERGE_MODEL,
     });
-    expect(DEFAULT_GOOGLE_CONCIERGE_MODEL).toBe("gemini-3.6-flash");
+    expect(DEFAULT_GOOGLE_CONCIERGE_MODEL).toBe("gemini-3.8-flash");
+    expect(CONCIERGE_MODEL_MAX_RETRIES).toBe(4);
   });
 
   it("creates a direct Google LanguageModel without making a request", () => {

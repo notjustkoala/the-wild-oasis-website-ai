@@ -36,6 +36,8 @@ function expectPayloadStringsNotToContain(payload: unknown, sensitiveValues: str
 
 describe("operations BFF security contract", () => {
   const env = { NODE_ENV: "production", AI_ADMIN_ORIGIN: "https://admin.example.com" } as NodeJS.ProcessEnv;
+  const bookingFirstNote = "F06-R5 验收——请在入住前跟进付款。";
+  const bookingFirstNoteCommand = `为预订 699 起草内部备注：${bookingFirstNote}`;
 
   it("threads the authorized bearer client into policy-capable operations tools", () => {
     const agentSource = readFileSync(resolve(process.cwd(), "app/_ai/agents/operations-agent.ts"), "utf8");
@@ -321,6 +323,7 @@ describe("operations BFF security contract", () => {
       "getBookingRisks",
     ]);
     expect(result.steps[0].toolResults).toHaveLength(3);
+    expect(calls).toBe(2);
     expect(from).toHaveBeenCalledTimes(3);
   });
 
@@ -482,6 +485,67 @@ describe("operations BFF security contract", () => {
     const longId = sanitizeOperationsUserText("Draft an internal note bookingId=1234567890: Email Alice");
     expect(longId).toContain("bookingId=1234567890");
     expect(longId).not.toContain("Alice");
+  });
+
+  it("strictly binds and canonically redacts the Production Chinese booking-first note command", async () => {
+    expect(parseRequestedInternalNoteDraft(bookingFirstNoteCommand)).toEqual({
+      bookingId: 699,
+      note: bookingFirstNote,
+    });
+    expect(sanitizeOperationsUserText(bookingFirstNoteCommand)).toBe(
+      "Draft internal note bookingId=699: [redacted]",
+    );
+
+    const result = await readOperationsRequest(new Request("https://bff.example.com", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: bookingFirstNoteCommand }] }] }),
+    }));
+    expect(result.ok).toBe(true);
+    if (result.ok && result.uiMessages[0].parts[0].type === "text") {
+      expect(result.requestedInternalNoteDraft).toEqual({ bookingId: 699, note: bookingFirstNote });
+      expect(result.uiMessages[0].parts[0].text).toBe(
+        "Draft internal note bookingId=699: [redacted]",
+      );
+      expectPayloadStringsNotToContain(result.uiMessages, [
+        bookingFirstNote,
+        "F06-R5",
+        "验收",
+        "跟进付款",
+      ]);
+    }
+  });
+
+  it.each([
+    ["为订单#699草拟备注: Follow up before check-in.", "Follow up before check-in."],
+    ["为 booking id = #699 起草内部备注：  First line  \n  second line  ", "First line  \n  second line"],
+  ])("accepts only bounded booking-first note punctuation and spacing: %s", (text, note) => {
+    expect(parseRequestedInternalNoteDraft(text)).toEqual({ bookingId: 699, note });
+  });
+
+  it.each([
+    ["missing ID", "为预订起草内部备注：private"],
+    ["zero ID", "为预订 0 起草内部备注：private"],
+    ["negative ID", "为预订 -1 起草内部备注：private"],
+    ["overlong ID", "为预订 999999999999999999999999 起草内部备注：private"],
+    ["empty note", "为预订 699 起草内部备注：   "],
+    ["overlong note", `为预订 699 起草内部备注：${"x".repeat(501)}`],
+    ["trailing operations command", "为预订 699 起草内部备注：private；查询订单1"],
+    ["second note", "为预订 699 起草内部备注：private；为订单700起草内部备注：second"],
+    ["switched second note", "为预订 699 起草内部备注：private然后为订单700起草内部备注：second"],
+    ["English-switched second note", "为预订 699 起草内部备注：private then 为订单700起草内部备注：second"],
+    ["English compound-switched second note", "为预订 699 起草内部备注：private and then 为订单700起草内部备注：second"],
+    ["bare-bing switched second note", "为预订 699 起草内部备注：private并为订单700起草内部备注：second"],
+    ["spaced bare-bing switched second note", "为预订 699 起草内部备注：private 并 为订单700起草内部备注：second"],
+    ["punctuated English-switched second note", "为预订 699 起草内部备注：private；then 为订单700起草内部备注：second"],
+    ["policy query", "为预订 699 起草内部备注：private；查询退款政策"],
+    ["adjacent Chinese name", "为张三预订 699 起草内部备注：private"],
+    ["adjacent email", "alice@example.com 为预订 699 起草内部备注：private"],
+    ["generic draft wording", "起草订单 699 的付款跟进"],
+  ])("fails closed for an invalid booking-first note command with %s", (_caseName, text) => {
+    const fallback = "Booking lookup requires a numeric bookingId; guest names are not sent to the AI.";
+    expect(parseRequestedInternalNoteDraft(text)).toBeUndefined();
+    expect(sanitizeOperationsUserText(text)).toBe(fallback);
   });
 
   it("strictly binds only a complete latest-turn internal-note command", async () => {
@@ -663,12 +727,12 @@ describe("operations BFF security contract", () => {
   });
 
   it("keeps exact note text out of every model call while retaining it in the raw UI proposal", async () => {
-    const exactNote = "Call 张三 at 09:00\n  Preserve this spacing";
+    const exactNote = bookingFirstNote;
     const approvalId = "approval-private-id";
     const parsed = await readOperationsRequest(new Request("https://bff.example.com", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: `Draft an internal note for booking 699:\n${exactNote}` }] }] }),
+      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: bookingFirstNoteCommand }] }] }),
     }));
     if (!parsed.ok || !parsed.requestedInternalNoteDraft) throw new Error("Expected a bound note draft");
 
@@ -686,7 +750,7 @@ describe("operations BFF security contract", () => {
       doGenerate: async (options) => {
         calls += 1;
         const serialized = JSON.stringify(options);
-        expectPayloadStringsNotToContain(options, [exactNote, "Preserve this spacing", approvalId]);
+        expectPayloadStringsNotToContain(options, [exactNote, "F06-R5", "验收", "跟进付款", approvalId]);
         if (calls === 1) {
           expect(options.toolChoice).toEqual({ type: "tool", toolName: "addBookingInternalNote" });
           expect(options.tools?.map((candidate) => candidate.name)).toEqual(["addBookingInternalNote"]);
@@ -698,13 +762,7 @@ describe("operations BFF security contract", () => {
             warnings: [],
           };
         }
-        expect(options.tools?.map((candidate) => candidate.name)).not.toContain("addBookingInternalNote");
-        return {
-          content: [{ type: "text" as const, text: "Approval is required before saving." }],
-          finishReason: { unified: "stop" as const, raw: undefined },
-          usage: { inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 1, text: 1, reasoning: undefined } },
-          warnings: [],
-        };
+        throw new Error("A post-tool provider 503 must never be reached.");
       },
     });
     const client = { from: vi.fn(() => builder), rpc };
@@ -718,7 +776,8 @@ describe("operations BFF security contract", () => {
       messages: await convertToModelMessages(parsed.uiMessages, { tools: agent.tools, ignoreIncompleteToolCalls: true }),
     });
 
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
+    expect(result.steps).toHaveLength(1);
     expect(rpc).toHaveBeenCalledWith("create_booking_ai_approval", { p_booking_id: 699, p_note: exactNote });
     expect(result.steps[0].toolResults[0].output).toMatchObject({
       approvalId,
@@ -728,7 +787,7 @@ describe("operations BFF security contract", () => {
     });
   });
 
-  it("streams the raw approval proposal to the UI while every model step sees only the safe tool summary", async () => {
+  it("streams the raw approval proposal while stopping before a post-tool model step", async () => {
     const exactNote = "Call 张三 after 09:00\n  Preserve stream spacing";
     const approvalId = "approval-stream-private-id";
     const parsed = await readOperationsRequest(new Request("https://bff.example.com", {
@@ -750,19 +809,12 @@ describe("operations BFF security contract", () => {
       doStream: async (options) => {
         calls += 1;
         expectPayloadStringsNotToContain(options, [exactNote, "Preserve stream spacing", approvalId]);
-        const chunks: LanguageModelV4StreamPart[] = calls === 1
-          ? [
-              { type: "stream-start", warnings: [] },
-              { type: "tool-call", toolCallId: "stream-draft", toolName: "addBookingInternalNote", input: JSON.stringify({ bookingId: 699 }) },
-              { type: "finish", usage, finishReason: { unified: "tool-calls", raw: undefined } },
-            ]
-          : [
-              { type: "stream-start", warnings: [] },
-              { type: "text-start", id: "response-text" },
-              { type: "text-delta", id: "response-text", delta: "Approval is required before saving." },
-              { type: "text-end", id: "response-text" },
-              { type: "finish", usage, finishReason: { unified: "stop", raw: undefined } },
-            ];
+        if (calls > 1) throw new Error("A post-tool provider 429 must never be reached.");
+        const chunks: LanguageModelV4StreamPart[] = [
+          { type: "stream-start", warnings: [] },
+          { type: "tool-call", toolCallId: "stream-draft", toolName: "addBookingInternalNote", input: JSON.stringify({ bookingId: 699 }) },
+          { type: "finish", usage, finishReason: { unified: "tool-calls", raw: undefined } },
+        ];
         return {
           stream: simulateReadableStream({
             chunks,
@@ -811,11 +863,70 @@ describe("operations BFF security contract", () => {
         status: "pending",
       },
     });
-    expect(model.doStreamCalls).toHaveLength(2);
+    expect(response.status).toBe(200);
+    expect(model.doStreamCalls).toHaveLength(1);
     for (const call of model.doStreamCalls) {
       expectPayloadStringsNotToContain(call, [exactNote, "Preserve stream spacing", approvalId]);
     }
-    expect(JSON.stringify(model.doStreamCalls[1])).toContain("An internal-note approval draft was created.");
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the approval proposal without opening a post-tool provider 503 window", async () => {
+    const exactNote = "Do not expose this note after the tool call.";
+    const approvalId = "approval-no-post-tool-retry";
+    let providerCalls = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        providerCalls += 1;
+        if (providerCalls > 1) {
+          throw Object.assign(new Error("simulated post-tool provider outage"), {
+            statusCode: 503,
+            isRetryable: true,
+          });
+        }
+        return {
+          content: [{
+            type: "tool-call" as const,
+            toolCallId: "draft-without-followup",
+            toolName: "addBookingInternalNote",
+            input: JSON.stringify({ bookingId: 699 }),
+          }],
+          finishReason: { unified: "tool-calls" as const, raw: undefined },
+          usage: { inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined }, outputTokens: { total: 1, text: 1, reasoning: undefined } },
+          warnings: [],
+        };
+      },
+    });
+    const builder: Record<string, any> = {
+      select: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      maybeSingle: vi.fn(async () => ({ data: { id: 699 }, error: null })),
+    };
+    const rpc = vi.fn(async () => ({
+      data: { approval_id: approvalId, booking_id: 699, note: exactNote, status: "pending" },
+      error: null,
+    }));
+    const agent = createOperationsAgent({
+      client: { from: vi.fn(() => builder), rpc },
+      actorId: "staff-1",
+      model,
+      requestedInternalNoteDraft: { bookingId: 699, note: exactNote },
+    });
+
+    const result = await agent.generate({
+      prompt: "Draft internal note bookingId=699: [redacted]",
+    });
+
+    expect(providerCalls).toBe(1);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0].toolResults[0].output).toMatchObject({
+      kind: "internal-note-approval",
+      approvalId,
+      bookingId: 699,
+      note: exactNote,
+      status: "pending",
+    });
   });
 
   it.each([

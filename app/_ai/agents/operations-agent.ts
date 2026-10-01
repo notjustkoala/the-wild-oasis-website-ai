@@ -1,6 +1,6 @@
 import "server-only";
 
-import { InferAgentUIMessage, isStepCount, ToolLoopAgent, type LanguageModel } from "ai";
+import { InferAgentUIMessage, isStepCount, ToolLoopAgent, type LanguageModel, type StopCondition } from "ai";
 
 import { createOperationsTools } from "@/app/_ai/operations-tools";
 import type { PolicyRpcClient } from "@/app/_ai/policies/policy-repository";
@@ -83,6 +83,13 @@ export function createOperationsAgent({
   const toolsAfterInternalNote = Object.keys(tools).filter(
     (toolName) => toolName !== "addBookingInternalNote"
   ) as Array<keyof typeof tools>;
+  const stopAfterBoundInternalNoteDraft: StopCondition<typeof tools> = ({ steps }) =>
+    Boolean(
+      requestedInternalNoteDraft &&
+      steps.at(-1)?.toolResults.some(
+        (toolResult) => toolResult.toolName === "addBookingInternalNote"
+      )
+    );
 
   return new ToolLoopAgent({
     id: "wild-oasis-operations-copilot",
@@ -139,7 +146,10 @@ export function createOperationsAgent({
         ? { activeTools: toolsAfterPolicySearch }
         : undefined;
     },
-    stopWhen: isStepCount(8),
+    // A successful note tool result already contains the trusted approval
+    // proposal needed by the UI. Stop before another provider call so a later
+    // 429/503 cannot hide an approval that was already persisted.
+    stopWhen: [isStepCount(8), stopAfterBoundInternalNoteDraft],
     maxRetries: CONCIERGE_MODEL_MAX_RETRIES,
     reasoning: "low",
     maxOutputTokens: 1_200,

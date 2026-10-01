@@ -69,9 +69,12 @@ const strictEnglishInternalNotePattern =
   /^(?:add|create|write|draft)\s+(?:an?\s+)?(?:internal\s+)?note\s+(?:for\s+)?booking(?:\s*id)?\s*[:=#]?\s*#?([1-9]\d*)\s*(?:[:：-]\s*|\r?\n)([\s\S]+)$/iu;
 const strictChineseInternalNotePattern =
   /^(?:添加|创建|写入|草拟)\s*(?:内部)?备注\s*[:：-]?\s*(?:booking(?:\s*id)?|订单|预订)\s*[:：=#]?\s*#?([1-9]\d*)\s*(?:[:：-]\s*|\r?\n)([\s\S]+)$/iu;
+const strictChineseBookingFirstInternalNotePattern =
+  /^为\s*(?:预订|订单|booking\s*id)\s*[:：=#]?\s*#?([1-9]\d*)\s*(?:起草|草拟)\s*(?:内部)?备注\s*(?:[:：-]\s*|\r?\n)([\s\S]+)$/iu;
 const trailingCommandSeparatorPattern = /\r?\n|[,，.。!！?？:：;；]/gu;
 const englishStrongCommandSwitchPattern = /\s+(?:(?:and\s+)?then)\s+/giu;
 const chineseStrongCommandSwitchPattern = /(?:然后|并且|再)\s*/gu;
+const chineseBookingFirstNoteSwitchPattern = /并(?!且)\s*/gu;
 const optionalEnglishSeparatedConnectorPattern = /^\s*(?:(?:(?:and\s+)?then|and)\s+)?/iu;
 const optionalChineseSeparatedConnectorPattern = /^\s*(?:(?:然后|并且|再|并)\s*)?/u;
 const englishOperationsActionPattern =
@@ -105,6 +108,10 @@ function startsWithOperationsCommand(
   );
 }
 
+function isStrictChineseBookingFirstNoteCommand(text: string) {
+  return strictChineseBookingFirstInternalNotePattern.test(text.trim());
+}
+
 function hasTrailingOperationsCommand(note: string) {
   for (const separator of note.matchAll(trailingCommandSeparatorPattern)) {
     const tail = note.slice((separator.index ?? 0) + separator[0].length);
@@ -119,7 +126,8 @@ function hasTrailingOperationsCommand(note: string) {
         chineseTail,
         chineseOperationsActionPattern,
         chineseOperationsObjectPatterns,
-      )
+      ) || isStrictChineseBookingFirstNoteCommand(englishTail)
+        || isStrictChineseBookingFirstNoteCommand(chineseTail)
     ) return true;
   }
 
@@ -129,22 +137,30 @@ function hasTrailingOperationsCommand(note: string) {
       tail,
       englishOperationsActionPattern,
       englishOperationsObjectPatterns,
-    )) return true;
+    ) || isStrictChineseBookingFirstNoteCommand(tail)) return true;
   }
   for (const commandSwitch of note.matchAll(chineseStrongCommandSwitchPattern)) {
     const tail = note.slice((commandSwitch.index ?? 0) + commandSwitch[0].length);
-    if (startsWithOperationsCommand(
-      tail,
-      chineseOperationsActionPattern,
-      chineseOperationsObjectPatterns,
-    )) return true;
+    if (
+      startsWithOperationsCommand(
+        tail,
+        chineseOperationsActionPattern,
+        chineseOperationsObjectPatterns,
+      ) || isStrictChineseBookingFirstNoteCommand(tail)
+    ) return true;
+  }
+  for (const commandSwitch of note.matchAll(chineseBookingFirstNoteSwitchPattern)) {
+    const tail = note.slice((commandSwitch.index ?? 0) + commandSwitch[0].length);
+    if (isStrictChineseBookingFirstNoteCommand(tail)) return true;
   }
   return false;
 }
 
 export function parseRequestedInternalNoteDraft(text: string): RequestedInternalNoteDraft | undefined {
   const normalized = text.trim();
-  const match = strictEnglishInternalNotePattern.exec(normalized) ?? strictChineseInternalNotePattern.exec(normalized);
+  const match = strictEnglishInternalNotePattern.exec(normalized)
+    ?? strictChineseInternalNotePattern.exec(normalized)
+    ?? strictChineseBookingFirstInternalNotePattern.exec(normalized);
   if (!match) return undefined;
 
   const bookingId = Number(match[1]);
@@ -347,10 +363,16 @@ export function sanitizeOperationsUserText(text: string) {
     }
   );
 
-  const noteRedacted = redactNoteCommand(
-    redactNoteCommand(policyNormalized, freeformNoteCommandPattern),
-    cjkNoteCommandPattern
-  );
+  const normalizedPolicyText = policyNormalized.trim();
+  const bookingFirstDraft = strictChineseBookingFirstInternalNotePattern.test(normalizedPolicyText)
+    ? parseRequestedInternalNoteDraft(normalizedPolicyText)
+    : undefined;
+  const noteRedacted = bookingFirstDraft
+    ? `Draft internal note bookingId=${tokenForBookingId(String(bookingFirstDraft.bookingId))}: [redacted]`
+    : redactNoteCommand(
+        redactNoteCommand(policyNormalized, freeformNoteCommandPattern),
+        cjkNoteCommandPattern
+      );
   // Chinese explicit dates are a newly supported model-facing syntax. They
   // are allowed only as one validated pair; otherwise fail closed instead of
   // restoring an invalid, reversed, ambiguous, or over-broad range.

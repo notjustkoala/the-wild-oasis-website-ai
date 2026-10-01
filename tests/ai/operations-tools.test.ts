@@ -139,7 +139,25 @@ describe("operations copilot fixed tools", () => {
     "添加内部备注：订单699：私密；查询取消政策",
     "添加内部备注：订单699：私密；查找退款政策",
     "添加内部备注：订单699：私密；获取例外SOP",
-  ])("rejects a trailing operations command before any query or RPC: %s", async (text) => {
+    "为预订起草内部备注：private",
+    "为预订 0 起草内部备注：private",
+    "为预订 -1 起草内部备注：private",
+    "为预订 999999999999999999999999 起草内部备注：private",
+    "为预订 699 起草内部备注：   ",
+    `为预订 699 起草内部备注：${"x".repeat(501)}`,
+    "为预订 699 起草内部备注：private；查询订单1",
+    "为预订 699 起草内部备注：private；为订单700起草内部备注：second",
+    "为预订 699 起草内部备注：private然后为订单700起草内部备注：second",
+    "为预订 699 起草内部备注：private then 为订单700起草内部备注：second",
+    "为预订 699 起草内部备注：private and then 为订单700起草内部备注：second",
+    "为预订 699 起草内部备注：private并为订单700起草内部备注：second",
+    "为预订 699 起草内部备注：private 并 为订单700起草内部备注：second",
+    "为预订 699 起草内部备注：private；then 为订单700起草内部备注：second",
+    "为预订 699 起草内部备注：private；查询退款政策",
+    "为张三预订 699 起草内部备注：private",
+    "alice@example.com 为预订 699 起草内部备注：private",
+    "起草订单 699 的付款跟进",
+  ])("rejects an unbound or chained note command before any query or RPC: %s", async (text) => {
     const from = vi.fn();
     const rpc = vi.fn();
     const tools = createOperationsTools({

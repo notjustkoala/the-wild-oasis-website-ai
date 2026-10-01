@@ -158,7 +158,7 @@ describe("generation routes preserve trace and failure semantics", () => {
     }));
   });
   it("operations binds an exact note only in agent options and never persists its text", async () => {
-    const exactNote = "Call 张三\n  preserve exact spacing";
+    const exactNote = "F06-R5 验收——请在入住前跟进付款。";
     const proposal = {
       kind: "internal-note-approval",
       approvalId: "approval-json-route",
@@ -180,18 +180,18 @@ describe("generation routes preserve trace and failure semantics", () => {
       }],
     });
     const response = await operations(request("admin", {
-      text: `Draft an internal note for booking 699:\n${exactNote}`,
+      text: `为预订 699 起草内部备注：${exactNote}`,
     }));
     expect(response.status).toBe(200);
     expect(mocks.agentOptions.requestedInternalNoteDraft).toEqual({ bookingId: 699, note: exactNote });
-    expectPayloadStringsNotToContain(mocks.generate.mock.calls, [exactNote, "preserve exact spacing"]);
+    expectPayloadStringsNotToContain(mocks.generate.mock.calls, [exactNote, "F06-R5", "验收", "跟进付款"]);
     expect(await response.json()).toMatchObject({
       steps: [{
         toolCalls: [{ toolName: "addBookingInternalNote", input: { bookingId: 699 } }],
         toolResults: [{ toolName: "addBookingInternalNote", output: proposal }],
       }],
     });
-    expectPayloadStringsNotToContain(mocks.persist.mock.calls, [exactNote, "preserve exact spacing"]);
+    expectPayloadStringsNotToContain(mocks.persist.mock.calls, [exactNote, "F06-R5", "验收", "跟进付款"]);
   });
   it("booking insight rejects early paths with trace, while cache hits have no generation receipt", async () => {
     const analyze = vi.fn().mockResolvedValue({ state: "fresh", insight: null });

@@ -14,6 +14,7 @@ import ConciergePanel, {
   type ConciergeChatAdapter,
 } from "@/app/_components/concierge/ConciergePanel";
 import { CONCIERGE_INPUT_NOTICE_PREFIX } from "@/app/_ai/tools/input-error";
+import { CONCIERGE_DAILY_QUOTA_MESSAGE, CONCIERGE_RATE_LIMIT_MESSAGE } from "@/app/_ai/concierge-error-messages";
 
 const mocks = vi.hoisted(() => ({
   adoptDraft: vi.fn(),
@@ -115,6 +116,32 @@ async function interact(action: () => Promise<unknown>) {
 }
 
 describe("ConciergePanel production UI states", () => {
+  it.each(["sse", "http"])("explains the daily quota and preserves results without offering an immediate retry (%s)", async transport => {
+    const user = userEvent.setup();
+    const traceId = "00000000-0000-4000-8000-000000000001";
+    const error = new Error(transport === "sse" ? `${CONCIERGE_DAILY_QUOTA_MESSAGE} Reference: ${traceId}` : JSON.stringify({ error: CONCIERGE_DAILY_QUOTA_MESSAGE, traceId }));
+    const adapter = createAdapter({ status: "error", error, messages: [assistantMessage([{ type: "tool-searchAvailableCabins", toolCallId: "cabins", state: "output-available", input: {}, output: searchOutput([cabin]) }])] });
+    render(<ConciergePanel chatAdapter={adapter} />);
+    await openPanel(user);
+    expect(screen.getByText("Cabin 001")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(CONCIERGE_DAILY_QUOTA_MESSAGE);
+    expect(screen.getByRole("alert")).toHaveTextContent("Received text and cards are kept");
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/Check your connection/);
+    expect(screen.queryByRole("button", { name: "Retry last request" })).not.toBeInTheDocument();
+    expect(adapter.regenerate).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes a temporary rate limit and retries only on a click", async () => {
+    const user = userEvent.setup();
+    const adapter = createAdapter({ status: "error", error: new Error(`${CONCIERGE_RATE_LIMIT_MESSAGE} Reference: 00000000-0000-4000-8000-000000000001`) });
+    render(<ConciergePanel chatAdapter={adapter} />);
+    await openPanel(user);
+    expect(screen.getByRole("alert")).toHaveTextContent(CONCIERGE_RATE_LIMIT_MESSAGE);
+    expect(adapter.regenerate).not.toHaveBeenCalled();
+    await interact(() => user.click(screen.getByRole("button", { name: "Retry last request" })));
+    expect(adapter.regenerate).toHaveBeenCalledOnce();
+  });
+
   it("keeps cards and partial text, identifies a length stop, and retries only after an explicit click", async () => {
     const user = userEvent.setup();
     const message = { ...assistantMessage([

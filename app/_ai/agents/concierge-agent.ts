@@ -13,6 +13,7 @@ import { createPolicySearchTool } from "@/app/_ai/tools/policy-search";
 import policyConfig from "@/policy-rag.config.json";
 import { POLICY_ANSWER_INSTRUCTIONS } from "@/app/_ai/policies/policy-answer-instructions";
 import type { RunObserver } from "@/app/_ai/observability/run";
+import { withConciergeQuotaProtection } from "@/app/_ai/providers/concierge-quota";
 
 export const conciergeTools = {
   ...cabinTools,
@@ -31,6 +32,7 @@ export const CONCIERGE_INSTRUCTIONS = `You are the Wild Oasis AI concierge.
 Your job is to help guests discover cabins using current inventory. Follow these rules:
 - Reply in the guest's language. Be concise, warm, and explicit about uncertainty.
 - Answer only the final user message. Earlier user messages are context for follow-ups; do not repeat or re-answer an earlier request unless the final message explicitly asks you to review it.
+- A question asking what preferences the guest has already expressed is a conversation recap, not a new cabin search. Summarize only the guest's stated preferences and acknowledge anything not specified; do not list cabins, infer amenities, or claim a preference was saved to a profile.
 - Before searching, obtain exact check-in date, checkout date, and whole-number guest count. Ask a short follow-up when any is missing or ambiguous. Never invent dates.
 - Use searchAvailableCabins for recommendations. Use getCabinDetails and compareCabins only for their documented read-only purposes.
 - For every question about hotel policy, rules, fees, exceptions, accessibility, pets, cancellation, payment, check-in/out, breakfast, or dietary requests, call searchHotelPolicies. Never answer policy from memory.
@@ -54,12 +56,14 @@ export function createConciergeAgent({
   tools = cabinTools,
   policySearchTool = conciergeTools.searchHotelPolicies,
   currentPolicyQuestion,
+  preferenceRecallOnly = false,
   observer,
 }: {
   model?: LanguageModel;
   tools?: typeof cabinTools;
   policySearchTool?: typeof conciergeTools.searchHotelPolicies;
   currentPolicyQuestion?: string;
+  preferenceRecallOnly?: boolean;
   observer?: RunObserver;
 } = {}) {
   const enforcedPolicyQuestion = currentPolicyQuestion
@@ -68,9 +72,10 @@ export function createConciergeAgent({
   return new ToolLoopAgent({
     id: "wild-oasis-concierge",
     onStepEnd: observer?.step,
-    model: model ?? resolveConciergeModel(),
+    model: withConciergeQuotaProtection(model ?? resolveConciergeModel()),
     instructions: CONCIERGE_INSTRUCTIONS,
     tools: { ...tools, searchHotelPolicies: policySearchTool },
+    ...(preferenceRecallOnly ? { activeTools: [], toolChoice: "none" as const } : {}),
     experimental_refineToolInput: enforcedPolicyQuestion
       ? {
           searchHotelPolicies: (input) => ({

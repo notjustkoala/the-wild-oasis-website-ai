@@ -14,6 +14,7 @@ import {
 
 import type { ConciergeAgentUIMessage } from "@/app/_ai/agents/concierge-agent";
 import type { CabinRecommendation } from "@/app/_ai/schemas/concierge";
+import { conciergePublicErrorMessage, CONCIERGE_DAILY_QUOTA_MESSAGE } from "@/app/_ai/concierge-error-messages";
 import { useReservation } from "@/app/_components/ReservationContext";
 import CabinComparison from "./CabinComparison";
 import CabinRecommendationCard from "./CabinRecommendationCard";
@@ -121,6 +122,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
   } = chatAdapter ?? liveChat;
 
   const busy = status === "submitted" || status === "streaming";
+  const publicError = error ? conciergePublicErrorMessage(error) : undefined;
   const activeChat = useRef({ busy, stop });
   activeChat.current = { busy, stop };
 
@@ -503,15 +505,16 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
               {error ? (
                 <div className="rounded-md border border-red-400/50 bg-red-950/40 p-3 text-sm text-red-100" role="alert">
                   <p>
-                    The concierge could not finish that request. Received text and cards are kept and may be incomplete. Check your connection and try again.
+                    {publicError ?? "The concierge could not finish that request. Please try again later or browse cabins without AI."}
                   </p>
-                  <button
+                  <p className="mt-2">Received text and cards are kept and may be incomplete.</p>
+                  {publicError !== CONCIERGE_DAILY_QUOTA_MESSAGE ? <button
                     type="button"
                     onClick={handleRetry}
                     className="mt-2 rounded bg-red-100 px-3 py-1.5 font-semibold text-red-950 focus:outline-none focus:ring-2 focus:ring-white"
                   >
                     Retry last request
-                  </button>
+                  </button> : null}
                 </div>
               ) : null}
               {receipt ? <ResponseFeedback key={receipt.traceId} receipt={receipt} busy={busy} /> : null}

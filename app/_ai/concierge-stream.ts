@@ -1,6 +1,8 @@
 import type { StreamTextTransform, ToolSet } from "ai";
 import { safeGenerationErrorDiagnostic } from "@/app/_ai/observability/error-diagnostic";
 import { ConciergeInputError, CONCIERGE_INPUT_NOTICE_PREFIX } from "@/app/_ai/tools/input-error";
+import { ConciergeDailyQuotaError } from "@/app/_ai/providers/concierge-quota";
+import { CONCIERGE_DAILY_QUOTA_MESSAGE, CONCIERGE_RATE_LIMIT_MESSAGE } from "@/app/_ai/concierge-error-messages";
 
 export const CONCIERGE_TIMEOUT = {
   totalMs: 90_000,
@@ -28,7 +30,11 @@ export function conciergeStreamErrorMessage(error: unknown, traceId: string): st
   if (error instanceof ConciergeInputError) {
     return `${CONCIERGE_INPUT_NOTICE_PREFIX}${error.message}`;
   }
-  const message = safeGenerationErrorDiagnostic(error).code === "timeout"
+  if (error instanceof ConciergeDailyQuotaError) return `${CONCIERGE_DAILY_QUOTA_MESSAGE} Reference: ${traceId}`;
+  const diagnostic = safeGenerationErrorDiagnostic(error);
+  const message = diagnostic.code === "provider-rate-limit"
+    ? CONCIERGE_RATE_LIMIT_MESSAGE
+    : diagnostic.code === "timeout"
     ? CONCIERGE_RECOVERABLE_ERROR
     : "The concierge could not load the requested data. Please try again.";
   return `${message} Reference: ${traceId}`;

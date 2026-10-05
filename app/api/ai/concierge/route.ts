@@ -4,7 +4,7 @@ import { createConciergeAgent, CONCIERGE_INSTRUCTIONS } from "@/app/_ai/agents/c
 import { observedRoute } from "@/app/_ai/observability/route";
 import {
   readBoundedConciergeJson,
-  scopeConciergePolicyTurn,
+  prepareConciergeTurn,
   validateConciergeRequestBody,
 } from "@/app/_ai/concierge-request";
 import {
@@ -13,6 +13,8 @@ import {
   createConciergeAbortRecoveryTransform,
 } from "@/app/_ai/concierge-stream";
 import { getConciergeProviderConfigurationError } from "@/app/_ai/providers/concierge-model";
+import { ConciergeDailyQuotaError } from "@/app/_ai/providers/concierge-quota";
+import { CONCIERGE_DAILY_QUOTA_MESSAGE } from "@/app/_ai/concierge-error-messages";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 100;
@@ -39,9 +41,10 @@ export async function POST(request: Request) {
   if (limited) return limited;
   run.watch(request.signal);
   try {
-    const turn = scopeConciergePolicyTurn(validated.uiMessages);
+    const turn = prepareConciergeTurn(validated.uiMessages);
     const agent = createConciergeAgent({
       currentPolicyQuestion: turn.currentPolicyQuestion,
+      preferenceRecallOnly: turn.preferenceRecallOnly,
       observer: run,
     });
     return await createAgentUIStreamResponse({
@@ -55,6 +58,7 @@ export async function POST(request: Request) {
       headers: Object.fromEntries(headers), // Includes Cache-Control: no-store.
     });
   } catch (error) {
+    if (error instanceof ConciergeDailyQuotaError) return fail(CONCIERGE_DAILY_QUOTA_MESSAGE, 429, "provider-unavailable");
     const timeout = error instanceof Error && /timeout|abort/i.test(error.name);
     return fail("The concierge is temporarily unavailable. Please browse cabins or try again.", timeout ? 504 : 503, request.signal?.aborted ? "cancelled" : timeout ? "timeout" : "provider-unavailable", request.signal?.aborted ? "cancelled" : timeout ? "timeout" : "failed");
   }

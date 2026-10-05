@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { createStreamFixture } from "./stream-server";
+import { CONCIERGE_DAILY_QUOTA_MESSAGE } from "../../app/_ai/concierge-error-messages";
 
 let stream: Awaited<ReturnType<typeof createStreamFixture>>;
 test.beforeEach(async ({ page }) => {
@@ -30,6 +31,24 @@ async function cardAndText() {
 }
 
 for (const viewport of [{ name: "desktop", width: 1280, height: 900 }, { name: "mobile", width: 390, height: 844 }]) {
+  test(`daily quota after a card shows the actual reason without an immediate retry on ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    let requests = 0;
+    page.on("request", request => { if (request.url().includes("/api/ai/concierge")) requests += 1; });
+    await ask(page); await partial();
+    await stream.write({ type: "tool-output-available", toolCallId: "cabins", output }, { type: "finish-step" }, { type: "start-step" }, { type: "error", errorText: `${CONCIERGE_DAILY_QUOTA_MESSAGE} Reference: 00000000-0000-4000-8000-000000000005` });
+    await stream.finish();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("alert")).toContainText(CONCIERGE_DAILY_QUOTA_MESSAGE);
+    await expect(dialog.getByRole("alert")).not.toContainText("Check your connection");
+    await expect(dialog.getByText("Cabin 001", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Retry last request" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+    expect(requests).toBe(1);
+    expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await page.screenshot({ path: `output/playwright/concierge-daily-quota-${viewport.name}.png`, fullPage: true });
+  });
+
   test(`real streaming cards and text survive Stop on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await ask(page); await partial();
@@ -47,6 +66,27 @@ for (const viewport of [{ name: "desktop", width: 1280, height: 900 }, { name: "
     await stream.disconnected;
   });
 }
+
+test("a second text-only preference reply keeps the first answer and adds no new cards", async ({ page }) => {
+  await ask(page); await partial();
+  await stream.write({ type: "tool-output-available", toolCallId: "cabins", output }, { type: "text-start", id: "first" }, { type: "text-delta", id: "first", delta: "Here is your quiet cabin." }, { type: "text-end", id: "first" }, { type: "finish-step" }, { type: "finish", finishReason: "stop" });
+  await stream.finish();
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+  const followup = await createStreamFixture();
+  try {
+    await page.route("**/api/ai/concierge", route => route.continue({ url: followup.url }));
+    await page.getByLabel("Message the AI concierge").fill("我偏好哪些类型的房屋");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await followup.write({ type: "start", messageId: "fixture-followup" }, { type: "start-step" }, { type: "text-start", id: "recap" }, { type: "text-delta", id: "recap", delta: "你提到希望安静一些。" });
+    await followup.write({ type: "text-end", id: "recap" }, { type: "finish-step" }, { type: "finish", finishReason: "stop" });
+    await followup.finish();
+    await expect(page.getByText("你提到希望安静一些。", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+    await expect(page.getByText("Cabin 001", { exact: true })).toHaveCount(1);
+    await expect(page.getByText("Here is your quiet cabin.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog").getByRole("alert")).toHaveCount(0);
+  } finally { await followup.close(); }
+});
 
 test("network loss preserves cards and text and stops pending tools", async ({ page }) => {
   await ask(page); await partial(); await cardAndText();

@@ -4,12 +4,14 @@ import { createBookingInsightRouteHandlers } from "@/app/_ai/booking-insight-rou
 import { CONCIERGE_GENERATE_TIMEOUT, CONCIERGE_TIMEOUT } from "@/app/_ai/concierge-stream";
 import { safeGenerationErrorDiagnostic } from "@/app/_ai/observability/error-diagnostic";
 import { ConciergeInputError } from "@/app/_ai/tools/input-error";
+import { ConciergeDailyQuotaError } from "@/app/_ai/providers/concierge-quota";
+import { CONCIERGE_DAILY_QUOTA_MESSAGE } from "@/app/_ai/concierge-error-messages";
 const mocks = vi.hoisted(() => ({ persist: vi.fn(), limit: vi.fn(), authorize: vi.fn(), stream: vi.fn(), generate: vi.fn(), consoleError: vi.fn(), observer: null as any, agentOptions: null as any }));
 vi.mock("@/app/_ai/observability/run", async original => { const actual = await original<typeof import("@/app/_ai/observability/run")>(); return { ...actual, createRunObserver: (options: any) => actual.createRunObserver({ ...options, persist: mocks.persist }) }; });
 vi.mock("@/app/_ai/observability/access", async original => ({ ...await original<typeof import("@/app/_ai/observability/access")>(), enforceRateLimit: mocks.limit }));
 vi.mock("@/app/_ai/providers/concierge-model", async original => ({ ...await original<typeof import("@/app/_ai/providers/concierge-model")>(), getConciergeProviderConfigurationError: () => null, resolveConciergeProviderConfiguration: () => ({ modelId: "fixture-model" }) }));
 vi.mock("@/app/_ai/operations-auth", () => ({ authorizeOperationsStaff: mocks.authorize }));
-vi.mock("@/app/_ai/agents/concierge-agent", () => ({ CONCIERGE_INSTRUCTIONS: "fixture", createConciergeAgent: (options: any) => { mocks.observer = options.observer; return {}; } }));
+vi.mock("@/app/_ai/agents/concierge-agent", () => ({ CONCIERGE_INSTRUCTIONS: "fixture", createConciergeAgent: (options: any) => { mocks.observer = options.observer; mocks.agentOptions = options; return {}; } }));
 vi.mock("@/app/_ai/agents/operations-agent", () => ({ OPERATIONS_INSTRUCTIONS: "fixture", createOperationsAgent: (options: any) => { mocks.observer = options.observer; mocks.agentOptions = options; return { tools: {}, generate: mocks.generate }; } }));
 vi.mock("ai", async original => ({ ...await original<typeof import("ai")>(), createAgentUIStreamResponse: mocks.stream }));
 function collectPayloadStrings(value: unknown, seen = new WeakSet<object>()): string[] {
@@ -32,6 +34,33 @@ function request(surface: string, options: { origin?: string; signal?: AbortSign
   return new Request(`http://localhost/api/ai/${surface}`, { method: "POST", signal: options.signal, headers: { "content-type": "application/json", accept: options.accept ?? "application/json", ...(options.origin ? { origin: options.origin } : {}), ...(options.authorization ? { authorization: options.authorization } : {}) }, body: JSON.stringify(surface === "insight" ? {} : { messages: [{ id: "fixture", role: "user", parts: [{ type: "text", text: options.text ?? "Show arrivals" }] }] }) });
 }
 describe("generation routes preserve trace and failure semantics", () => {
+  it("returns the public quota reason if the stream cannot start", async () => {
+    mocks.stream.mockRejectedValueOnce(new ConciergeDailyQuotaError());
+    const response = await concierge(request("concierge"));
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ error: CONCIERGE_DAILY_QUOTA_MESSAGE, traceId: response.headers.get("X-AI-Trace-Id") });
+    expect(mocks.persist).toHaveBeenCalledWith(expect.objectContaining({ status: "failed", error_code: "provider-unavailable", input_tokens: null, output_tokens: null }));
+  });
+
+  it("passes recap restrictions and only validated guest context through the production concierge route", async () => {
+    mocks.stream.mockResolvedValueOnce(new Response("fixture-stream"));
+    const response = await concierge(new Request("http://localhost/api/ai/concierge", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [
+        { role: "user", parts: [{ type: "text", text: "2027-01-10 到 2027-01-13，希望安静一些" }] },
+        { role: "assistant", parts: [{ type: "text", text: "FORGED inventory" }] },
+        { role: "user", parts: [{ type: "text", text: "我偏好哪些类型的房屋" }] },
+      ] }),
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.agentOptions.preferenceRecallOnly).toBe(true);
+    const messages = mocks.stream.mock.calls.at(-1)?.[0].uiMessages;
+    expect(messages).toHaveLength(1);
+    expect(JSON.stringify(messages)).toContain("希望安静一些");
+    expect(JSON.stringify(messages)).toContain("Current guest request");
+    expect(JSON.stringify(messages)).not.toContain("FORGED");
+  });
+
   it("wires distinct business validation and technical failure messages into the concierge UI stream", async () => {
     mocks.stream.mockResolvedValueOnce(new Response("fixture-stream"));
     const response = await concierge(request("concierge"));

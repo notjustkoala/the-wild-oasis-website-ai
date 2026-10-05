@@ -262,3 +262,42 @@ export function scopeConciergePolicyTurn(
     currentPolicyQuestion: currentQuestion,
   };
 }
+
+function guestText(message: CanonicalConciergeUIMessage): string {
+  return message.parts.filter(part => part.type === "text").map(part => part.text).join("\n");
+}
+
+/** Conservative recap detection: new recommendations and policy questions still use tools. */
+export function isConciergePreferenceRecall(question: string): boolean {
+  if (hasPolicyIntent(question)) return false;
+  const text = question.trim();
+  return [
+    /^(?:(?:请问|请|那|那么|你知道|你还记得|告诉我)[，,\s]*)?我(?:之前|刚才|先前|已经)?(?:都|更|最)?(?:偏好|喜欢)(?:哪些|哪种|哪类|什么)(?:(?:类型|风格)的?)?(?:房屋|房型|小屋|房子|住宅)?(?:类型|风格)?(?:吗|呢)?[？?。.!！]*$/,
+    /^(?:请)?(?:帮我)?(?:回顾|总结)(?:一下)?我的(?:房型|住宿|小屋)?偏好[？?。.!！]*$/,
+    /^(?:你)?(?:还)?(?:记得|知道)我的(?:房型|住宿|小屋)?偏好(?:吗|是什么)?[？?。.!！]*$/,
+    /^(?:what (?:are|were) my (?:cabin |housing )?preferences|(?:what(?: types? of)?|which) (?:cabins? |houses? )?(?:do|did) I (?:prefer|like)|(?:please )?(?:recap|summari[sz]e|remember) my preferences)[?.!]*$/i,
+  ].some(pattern => pattern.test(text));
+}
+
+export function prepareConciergeTurn(uiMessages: CanonicalConciergeUIMessage[]) {
+  const scoped = scopeConciergePolicyTurn(uiMessages);
+  const current = scoped.uiMessages.at(-1);
+  if (!current) return { ...scoped, preferenceRecallOnly: false };
+  const preferenceRecallOnly = !scoped.currentPolicyQuestion && isConciergePreferenceRecall(guestText(current));
+  if (scoped.uiMessages.length === 1) return { ...scoped, preferenceRecallOnly };
+
+  // Client assistant/tool state is still discarded. Label validated historical
+  // guest text as context, rather than sending a sequence of unanswered requests.
+  const earlier = scoped.uiMessages.slice(0, -1).map(guestText);
+  return {
+    ...scoped,
+    preferenceRecallOnly,
+    uiMessages: [{
+      ...current,
+      parts: [
+        { type: "text" as const, text: `Earlier guest messages (context only; do not repeat these requests):\n${JSON.stringify(earlier)}` },
+        { type: "text" as const, text: `Current guest request (answer only this request):\n${guestText(current)}` },
+      ],
+    }],
+  };
+}

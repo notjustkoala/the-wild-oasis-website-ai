@@ -11,6 +11,28 @@ const usage = {
   outputTokens: { total: 1, text: 1, reasoning: undefined },
 };
 
+it.each(["length", "stop"] as const)("preserves the %s finish reason and forwards a bounded explanation budget", async (finishReason) => {
+  const model = new MockLanguageModelV4({ doStream: async () => ({ stream: new ReadableStream<LanguageModelV4StreamPart>({ start(controller) {
+    controller.enqueue({ type: "text-start", id: "answer" });
+    controller.enqueue({ type: "text-delta", id: "answer", delta: "推荐说明" });
+    controller.enqueue({ type: "text-end", id: "answer" });
+    controller.enqueue({ type: "finish", usage, finishReason: { unified: finishReason, raw: undefined } });
+    controller.close();
+  } }) }) });
+  const response = await createAgentUIStreamResponse({
+    agent: createConciergeAgent({ model }),
+    uiMessages: [{ id: "question", role: "user", parts: [{ type: "text", text: "请简短说明推荐理由" }] }],
+    messageMetadata: ({ part }) => part.type === "finish" ? { finishReason: part.finishReason } : undefined,
+  });
+  const stream = await response.text();
+  const finish = stream.split(/\r?\n/).filter(line => line.startsWith("data: ") && !line.includes("[DONE]"))
+    .map(line => JSON.parse(line.slice(6))).find(event => event.type === "finish");
+  expect(finish).toMatchObject({ finishReason, messageMetadata: { finishReason } });
+  expect(stream).toContain("推荐说明");
+  expect(model.doStreamCalls[0].maxOutputTokens).toBeGreaterThan(900);
+  expect(model.doStreamCalls[0].maxOutputTokens).toBeLessThanOrEqual(3000);
+});
+
 it("serializes a rejected two-night search followed by a policy result and text without a false timeout", async () => {
   const source: ConciergeInventoryDataSource = {
     listCabins: vi.fn(async () => []), getCabins: vi.fn(async () => []),

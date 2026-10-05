@@ -41,6 +41,10 @@ describe("generation routes preserve trace and failure semantics", () => {
       .toBe("Request needs updating: Stay length must be between 3 and 30 nights");
     expect(onError(new Error("private key database failure"))).toMatch(/could not load the requested data.*Reference:/);
     expect(onError(new Error("private key database failure"))).not.toMatch(/took too long|private key/);
+    const metadata = mocks.stream.mock.calls.at(-1)?.[0].messageMetadata;
+    expect(metadata({ part: { type: "finish", finishReason: "length" } })).toEqual({ finishReason: "length" });
+    expect(metadata({ part: { type: "finish", finishReason: "stop" } })).toEqual({ finishReason: "stop" });
+    expect(metadata({ part: { type: "text-delta", text: "private" } })).toBeUndefined();
   });
 
   let restoreConsoleError: () => void = () => undefined;

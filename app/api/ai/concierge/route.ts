@@ -51,6 +51,7 @@ export async function POST(request: Request) {
       timeout: CONCIERGE_TIMEOUT,
       experimental_transform: [run.transform(request.signal), createConciergeAbortRecoveryTransform(request.signal)],
       onError: (error) => conciergeStreamErrorMessage(error, run.traceId),
+      messageMetadata: ({ part }) => part.type === "finish" ? { finishReason: part.finishReason } : undefined,
       headers: Object.fromEntries(headers), // Includes Cache-Control: no-store.
     });
   } catch (error) {

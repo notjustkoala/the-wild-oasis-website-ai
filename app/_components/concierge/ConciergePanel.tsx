@@ -278,7 +278,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
 
             <div
               ref={messagesRef}
-              className="flex-1 space-y-4 overflow-y-auto px-4 py-5"
+              className="concierge-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-5"
               aria-label="Concierge conversation"
               aria-live="polite"
               aria-busy={busy}
@@ -476,6 +476,16 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                           return null;
                       }
                     })}
+                    {message.role === "assistant" && message.metadata?.finishReason === "length" ? (
+                      <div className="rounded-md border border-amber-500/50 bg-amber-950/30 p-3 text-sm text-amber-100" role="status">
+                        <p>The explanation ended before it was complete. Received cabin cards and text are kept.</p>
+                        {message.id === messages.at(-1)?.id && !busy ? (
+                          <button type="button" onClick={handleRetry} className="mt-2 rounded-md border border-amber-400/60 px-3 py-1.5 font-semibold hover:bg-amber-900/30 focus:outline-none focus:ring-2 focus:ring-amber-300">
+                            Retry last request
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}

@@ -115,6 +115,36 @@ async function interact(action: () => Promise<unknown>) {
 }
 
 describe("ConciergePanel production UI states", () => {
+  it("keeps cards and partial text, identifies a length stop, and retries only after an explicit click", async () => {
+    const user = userEvent.setup();
+    const message = { ...assistantMessage([
+      { type: "tool-searchAvailableCabins", toolCallId: "cabins", state: "output-available", input: {}, output: searchOutput([cabin]) },
+      { type: "text", text: "小屋推荐说明到这里", state: "done" },
+    ]), metadata: { finishReason: "length" as const } };
+    const adapter = createAdapter({ status: "streaming", messages: [message] });
+    const { rerender } = render(<ConciergePanel chatAdapter={adapter} />);
+    await openPanel(user);
+    expect(screen.getByText("Cabin 001")).toBeVisible();
+    expect(screen.getByText("小屋推荐说明到这里")).toBeVisible();
+    expect(screen.getByText(/explanation ended before it was complete/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Retry last request" })).not.toBeInTheDocument();
+    rerender(<ConciergePanel chatAdapter={{ ...adapter, status: "ready" }} />);
+    expect(adapter.regenerate).not.toHaveBeenCalled();
+    await interact(() => user.click(screen.getByRole("button", { name: "Retry last request" })));
+    expect(adapter.regenerate).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not mark a complete response truncated and scopes the scrollbar to the conversation", async () => {
+    const user = userEvent.setup();
+    const message = { ...assistantMessage([{ type: "text", text: "完整的推荐说明。", state: "done" }]), metadata: { finishReason: "stop" as const } };
+    render(<ConciergePanel chatAdapter={createAdapter({ messages: [message] })} />);
+    await openPanel(user);
+    expect(screen.getByText("完整的推荐说明。")).toBeVisible();
+    expect(screen.queryByText(/explanation ended before it was complete/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Concierge conversation")).toHaveClass("concierge-scrollbar", "overscroll-contain");
+  });
+
   it("shows a business validation notice alongside a successful explanation without a timeout error", async () => {
     const user = userEvent.setup();
     const parts = [{ type: "tool-searchAvailableCabins", toolCallId: "invalid-stay", state: "output-error", input: {}, errorText: `${CONCIERGE_INPUT_NOTICE_PREFIX}Stay length must be between 3 and 30 nights` }, { type: "text", text: "您选择了两晚，请调整为至少三晚。", state: "done" }];

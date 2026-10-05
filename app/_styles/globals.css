@@ -24,6 +24,41 @@
     animation: rotate 1s infinite linear;
   }
 
+  .concierge-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.primary.600") theme("colors.primary.950");
+    scrollbar-gutter: stable;
+    color-scheme: dark;
+  }
+
+  .concierge-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .concierge-scrollbar::-webkit-scrollbar-track {
+    background: theme("colors.primary.950");
+    border-radius: 999px;
+  }
+
+  .concierge-scrollbar::-webkit-scrollbar-thumb {
+    background: theme("colors.primary.600");
+    border: 2px solid theme("colors.primary.950");
+    border-radius: 999px;
+  }
+
+  .concierge-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: theme("colors.accent.400");
+  }
+
+  .concierge-scrollbar::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  .concierge-scrollbar::-webkit-scrollbar-corner {
+    background: theme("colors.primary.950");
+  }
+
   @keyframes rotate {
     to {
       transform: rotate(1turn);

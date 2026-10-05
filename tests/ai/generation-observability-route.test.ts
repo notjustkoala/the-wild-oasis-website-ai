@@ -3,6 +3,7 @@ import { POST as operations } from "@/app/api/ai/admin/route";
 import { createBookingInsightRouteHandlers } from "@/app/_ai/booking-insight-route";
 import { CONCIERGE_GENERATE_TIMEOUT, CONCIERGE_TIMEOUT } from "@/app/_ai/concierge-stream";
 import { safeGenerationErrorDiagnostic } from "@/app/_ai/observability/error-diagnostic";
+import { ConciergeInputError } from "@/app/_ai/tools/input-error";
 const mocks = vi.hoisted(() => ({ persist: vi.fn(), limit: vi.fn(), authorize: vi.fn(), stream: vi.fn(), generate: vi.fn(), consoleError: vi.fn(), observer: null as any, agentOptions: null as any }));
 vi.mock("@/app/_ai/observability/run", async original => { const actual = await original<typeof import("@/app/_ai/observability/run")>(); return { ...actual, createRunObserver: (options: any) => actual.createRunObserver({ ...options, persist: mocks.persist }) }; });
 vi.mock("@/app/_ai/observability/access", async original => ({ ...await original<typeof import("@/app/_ai/observability/access")>(), enforceRateLimit: mocks.limit }));
@@ -31,6 +32,17 @@ function request(surface: string, options: { origin?: string; signal?: AbortSign
   return new Request(`http://localhost/api/ai/${surface}`, { method: "POST", signal: options.signal, headers: { "content-type": "application/json", accept: options.accept ?? "application/json", ...(options.origin ? { origin: options.origin } : {}), ...(options.authorization ? { authorization: options.authorization } : {}) }, body: JSON.stringify(surface === "insight" ? {} : { messages: [{ id: "fixture", role: "user", parts: [{ type: "text", text: options.text ?? "Show arrivals" }] }] }) });
 }
 describe("generation routes preserve trace and failure semantics", () => {
+  it("wires distinct business validation and technical failure messages into the concierge UI stream", async () => {
+    mocks.stream.mockResolvedValueOnce(new Response("fixture-stream"));
+    const response = await concierge(request("concierge"));
+    const onError = mocks.stream.mock.calls.at(-1)?.[0].onError;
+    expect(response.status).toBe(200);
+    expect(onError(new ConciergeInputError("Stay length must be between 3 and 30 nights")))
+      .toBe("Request needs updating: Stay length must be between 3 and 30 nights");
+    expect(onError(new Error("private key database failure"))).toMatch(/could not load the requested data.*Reference:/);
+    expect(onError(new Error("private key database failure"))).not.toMatch(/took too long|private key/);
+  });
+
   let restoreConsoleError: () => void = () => undefined;
   beforeEach(() => { vi.stubEnv("AI_OBSERVABILITY_SECRET", "fixture-secret"); mocks.consoleError.mockClear(); const consoleError = vi.spyOn(console, "error").mockImplementation(mocks.consoleError); restoreConsoleError = () => consoleError.mockRestore(); mocks.agentOptions = null; mocks.persist.mockResolvedValue(true); mocks.limit.mockResolvedValue({ ok: true }); mocks.authorize.mockResolvedValue({ ok: true, client: {}, user: { id: "synthetic" } }); mocks.stream.mockRejectedValue(new Error("private@example.invalid")); mocks.generate.mockRejectedValue(new Error("private@example.invalid")); });
   afterEach(() => { restoreConsoleError(); vi.unstubAllEnvs(); });

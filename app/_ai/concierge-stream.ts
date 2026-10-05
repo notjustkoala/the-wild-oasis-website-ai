@@ -1,4 +1,6 @@
 import type { StreamTextTransform, ToolSet } from "ai";
+import { safeGenerationErrorDiagnostic } from "@/app/_ai/observability/error-diagnostic";
+import { ConciergeInputError, CONCIERGE_INPUT_NOTICE_PREFIX } from "@/app/_ai/tools/input-error";
 
 export const CONCIERGE_TIMEOUT = {
   totalMs: 90_000,
@@ -22,6 +24,16 @@ export const CONCIERGE_GENERATE_TIMEOUT = {
 export const CONCIERGE_RECOVERABLE_ERROR =
   "The concierge took too long to respond. Please retry your request.";
 
+export function conciergeStreamErrorMessage(error: unknown, traceId: string): string {
+  if (error instanceof ConciergeInputError) {
+    return `${CONCIERGE_INPUT_NOTICE_PREFIX}${error.message}`;
+  }
+  const message = safeGenerationErrorDiagnostic(error).code === "timeout"
+    ? CONCIERGE_RECOVERABLE_ERROR
+    : "The concierge could not load the requested data. Please try again.";
+  return `${message} Reference: ${traceId}`;
+}
+
 export function createConciergeAbortRecoveryTransform<TOOLS extends ToolSet>(
   requestSignal: AbortSignal
 ): StreamTextTransform<TOOLS> {
@@ -31,7 +43,7 @@ export function createConciergeAbortRecoveryTransform<TOOLS extends ToolSet>(
         if (chunk.type === "abort" && !requestSignal.aborted) {
           controller.enqueue({
             type: "error",
-            error: new Error(CONCIERGE_RECOVERABLE_ERROR),
+            error: Object.assign(new Error(CONCIERGE_RECOVERABLE_ERROR), { name: "TimeoutError" }),
           });
           return;
         }

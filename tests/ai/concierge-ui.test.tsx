@@ -13,6 +13,7 @@ import ConciergePanel, {
   prepareConciergeRequestMessages,
   type ConciergeChatAdapter,
 } from "@/app/_components/concierge/ConciergePanel";
+import { CONCIERGE_INPUT_NOTICE_PREFIX } from "@/app/_ai/tools/input-error";
 
 const mocks = vi.hoisted(() => ({
   adoptDraft: vi.fn(),
@@ -114,6 +115,32 @@ async function interact(action: () => Promise<unknown>) {
 }
 
 describe("ConciergePanel production UI states", () => {
+  it("shows a business validation notice alongside a successful explanation without a timeout error", async () => {
+    const user = userEvent.setup();
+    const parts = [{ type: "tool-searchAvailableCabins", toolCallId: "invalid-stay", state: "output-error", input: {}, errorText: `${CONCIERGE_INPUT_NOTICE_PREFIX}Stay length must be between 3 and 30 nights` }, { type: "text", text: "您选择了两晚，请调整为至少三晚。", state: "done" }];
+    const adapter = createAdapter({ status: "streaming", messages: [assistantMessage(parts)] });
+    const { rerender } = render(<ConciergePanel chatAdapter={adapter} />);
+    await openPanel(user);
+    const notice = screen.getByText(/Stay length must be between 3 and 30 nights/);
+    expect(notice).toHaveClass("border-amber-500/50");
+    expect(notice).not.toHaveClass("border-red-400/50");
+    expect(screen.getByText("您选择了两晚，请调整为至少三晚。")).toBeVisible();
+    rerender(<ConciergePanel chatAdapter={{ ...adapter, status: "ready" }} />);
+    expect(notice).not.toHaveTextContent(/Stopped|too long|Reference/);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("keeps an actual tool failure visible when another tool returns a result", async () => {
+    const user = userEvent.setup();
+    render(<ConciergePanel chatAdapter={createAdapter({ messages: [assistantMessage([
+      { type: "tool-searchAvailableCabins", toolCallId: "failed-search", state: "output-error", input: {}, errorText: "The concierge could not load the requested data. Please try again." },
+      { type: "tool-searchAvailableCabins", toolCallId: "successful-search", state: "output-available", input: {}, output: searchOutput([cabin]) },
+    ])] })} />);
+    await openPanel(user);
+    expect(screen.getByText(/could not load the requested data/)).toHaveClass("border-red-400/50");
+    expect(screen.getByText("Cabin 001")).toBeVisible();
+  });
+
   it("pauses scrolling while reading and follows again after Jump to latest", async () => {
     const user = userEvent.setup();
     const adapter = createAdapter({ status: "streaming", messages: [assistantMessage([{ type: "text", text: "First part", state: "streaming" }])] });

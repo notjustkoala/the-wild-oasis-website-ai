@@ -5,6 +5,7 @@ import {
   createConciergeInventoryService,
   type ConciergeInventoryDataSource,
 } from "@/app/_ai/tools/cabin-tools";
+import { ConciergeInputError } from "@/app/_ai/tools/input-error";
 
 const cabins = [
   {
@@ -53,6 +54,23 @@ function createDataSource(conflicts = [2]): ConciergeInventoryDataSource {
 }
 
 describe("concierge inventory service", () => {
+  it("classifies a two-night stay below the live minimum as application validation", async () => {
+    const source = createDataSource();
+    source.getSettings = vi.fn(async () => ({ id: 1, minBookingLength: 3, maxBookingLength: 30, maxGuestsPerBooking: 10, breakfastPrice: 15 }));
+    const service = createConciergeInventoryService(source);
+    await expect(service.searchAvailableCabins({ startDate: "2027-01-10", endDate: "2027-01-12", numGuests: 2, preferences: [] }))
+      .rejects.toEqual(new ConciergeInputError("Stay length must be between 3 and 30 nights"));
+    await expect(service.searchAvailableCabins({ startDate: "2027-02-30", endDate: "2027-03-04", numGuests: 2, preferences: [] }))
+      .rejects.toBeInstanceOf(ConciergeInputError);
+  });
+
+  it("preserves real inventory failures instead of treating them as validation", async () => {
+    const source = createDataSource();
+    source.listCabins = vi.fn(async () => { throw new Error("Inventory unavailable"); });
+    await expect(createConciergeInventoryService(source).searchAvailableCabins({ startDate: "2027-01-10", endDate: "2027-01-13", numGuests: 2, preferences: [] }))
+      .rejects.not.toBeInstanceOf(ConciergeInputError);
+  });
+
   it("uses half-open conflicts, capacity, discount, nights and trusted total", async () => {
     const service = createConciergeInventoryService(createDataSource());
     const result = await service.searchAvailableCabins({

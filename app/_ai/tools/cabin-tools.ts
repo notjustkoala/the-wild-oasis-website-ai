@@ -4,6 +4,7 @@ import { tool } from "ai";
 
 import { getStayQuote, validateStay } from "@/app/_lib/booking-domain";
 import { privilegedSupabase } from "@/app/_lib/supabase-server";
+import { ConciergeInputError } from "@/app/_ai/tools/input-error";
 import {
   cabinDetailsInputSchema,
   compareCabinsInputSchema,
@@ -134,7 +135,7 @@ function assertStayDates(
     maxBookingLength: settings.maxBookingLength,
   });
 
-  if (!validation.ok) throw new Error(validation.error.message);
+  if (!validation.ok) throw new ConciergeInputError(validation.error.message);
   return validation.value.numNights;
 }
 

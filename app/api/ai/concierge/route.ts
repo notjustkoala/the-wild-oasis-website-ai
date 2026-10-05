@@ -8,7 +8,7 @@ import {
   validateConciergeRequestBody,
 } from "@/app/_ai/concierge-request";
 import {
-  CONCIERGE_RECOVERABLE_ERROR,
+  conciergeStreamErrorMessage,
   CONCIERGE_TIMEOUT,
   createConciergeAbortRecoveryTransform,
 } from "@/app/_ai/concierge-stream";
@@ -50,8 +50,7 @@ export async function POST(request: Request) {
       abortSignal: request.signal,
       timeout: CONCIERGE_TIMEOUT,
       experimental_transform: [run.transform(request.signal), createConciergeAbortRecoveryTransform(request.signal)],
-      onError: () =>
-        `${CONCIERGE_RECOVERABLE_ERROR} Reference: ${run.traceId}`,
+      onError: (error) => conciergeStreamErrorMessage(error, run.traceId),
       headers: Object.fromEntries(headers), // Includes Cache-Control: no-store.
     });
   } catch (error) {

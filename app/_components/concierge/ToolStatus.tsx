@@ -9,6 +9,7 @@ type ToolStatusProps = {
     | "output-error"
     | "output-denied";
   errorText?: string;
+  interrupted?: boolean;
 };
 
 const statusCopy: Record<ToolStatusProps["state"], string> = {
@@ -21,8 +22,9 @@ const statusCopy: Record<ToolStatusProps["state"], string> = {
   "output-denied": "Request was not approved",
 };
 
-export default function ToolStatus({ label, state, errorText }: ToolStatusProps) {
+export default function ToolStatus({ label, state, errorText, interrupted = false }: ToolStatusProps) {
   const failed = state === "output-error" || state === "output-denied";
+  const stopped = interrupted && state !== "output-available" && !failed;
   return (
     <div
       className={`rounded-md border px-3 py-2 text-sm ${
@@ -33,7 +35,7 @@ export default function ToolStatus({ label, state, errorText }: ToolStatusProps)
       role="status"
     >
       <span className="font-semibold text-primary-100">{label}: </span>
-      {errorText || statusCopy[state]}
+      {stopped ? "Stopped before a result was received" : errorText || statusCopy[state]}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { ConciergeAgentUIMessage } from "@/app/_ai/agents/concierge-agent";
@@ -114,6 +114,54 @@ async function interact(action: () => Promise<unknown>) {
 }
 
 describe("ConciergePanel production UI states", () => {
+  it("pauses scrolling while reading and follows again after Jump to latest", async () => {
+    const user = userEvent.setup();
+    const adapter = createAdapter({ status: "streaming", messages: [assistantMessage([{ type: "text", text: "First part", state: "streaming" }])] });
+    const { rerender } = render(<ConciergePanel chatAdapter={adapter} />);
+    await openPanel(user);
+    const conversation = screen.getByLabelText("Concierge conversation");
+    Object.defineProperties(conversation, { scrollHeight: { configurable: true, value: 1200 }, clientHeight: { configurable: true, value: 300 } });
+    conversation.scrollTop = 150;
+    fireEvent.scroll(conversation);
+    rerender(<ConciergePanel chatAdapter={{ ...adapter, messages: [assistantMessage([{ type: "text", text: "First part and next part", state: "streaming" }])] }} />);
+    expect(conversation.scrollTop).toBe(150);
+    expect(screen.getByText("First part and next part")).toBeVisible();
+    await interact(() => user.click(screen.getByRole("button", { name: "Jump to latest" })));
+    expect(conversation.scrollTop).toBe(1200);
+  });
+
+  it("keeps partial text and cards after failure and marks pending tools stopped", async () => {
+    const user = userEvent.setup();
+    const parts = [{ type: "text", text: "Partial response" }, { type: "tool-searchAvailableCabins", toolCallId: "done", state: "output-available", input: {}, output: searchOutput([cabin]) }, { type: "tool-getHotelPolicy", toolCallId: "pending", state: "input-available", input: {} }];
+    const adapter = createAdapter({ status: "streaming", messages: [assistantMessage(parts)] });
+    const { rerender } = render(<ConciergePanel chatAdapter={adapter} />);
+    await openPanel(user);
+    expect(screen.getByText("Partial response")).toBeVisible();
+    expect(screen.getByText("Cabin 001")).toBeVisible();
+    rerender(<ConciergePanel chatAdapter={{ ...adapter, status: "error", error: new Error("PRIVATE PROVIDER MESSAGE") }} />);
+    expect(screen.getByText("Partial response")).toBeVisible();
+    expect(screen.getByText("Cabin 001")).toBeVisible();
+    expect(screen.getByText("Stopped before a result was received")).toBeVisible();
+    expect(screen.queryByText("Checking live data…")).not.toBeInTheDocument();
+    expect(screen.queryByText("PRIVATE PROVIDER MESSAGE")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Received text and cards are kept");
+  });
+
+  it("cancels on closing or unmounting and does not submit while composing Chinese text", async () => {
+    const user = userEvent.setup();
+    const adapter = createAdapter();
+    const { rerender, unmount } = render(<ConciergePanel chatAdapter={adapter} />);
+    await openPanel(user);
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "查询木屋" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true, keyCode: 229 });
+    expect(adapter.sendMessage).not.toHaveBeenCalled();
+    rerender(<ConciergePanel chatAdapter={{ ...adapter, status: "streaming" }} />);
+    await interact(() => user.keyboard("{Escape}"));
+    expect(adapter.stop).toHaveBeenCalledOnce();
+    unmount();
+    expect(adapter.stop).toHaveBeenCalledTimes(2);
+  });
   beforeEach(() => {
     mocks.adoptDraft.mockReset();
     mocks.push.mockReset();
@@ -251,6 +299,8 @@ describe("ConciergePanel production UI states", () => {
     );
     expect(adapter.stop).toHaveBeenCalledTimes(1);
     expect(screen.getByText(/Response cancelled/i)).toBeInTheDocument();
+    expect(screen.getByText("Stopped before a result was received")).toBeVisible();
+    expect(screen.queryByText("Checking live data…")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Retry last request/i })
     ).not.toBeInTheDocument();

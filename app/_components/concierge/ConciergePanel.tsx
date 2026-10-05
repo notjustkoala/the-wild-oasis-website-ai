@@ -86,6 +86,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [wasCancelled, setWasCancelled] = useState(false);
+  const [showLatest, setShowLatest] = useState(false);
   const [receipt, setReceipt] = useState<ResponseReceipt | null>(null);
   const conciergeTransport = useMemo(() => new DefaultChatTransport<ConciergeAgentUIMessage>({
     api: "/api/ai/concierge",
@@ -101,7 +102,8 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
   const launcherRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const followLatest = useRef(true);
   const router = useRouter();
   const { adoptDraft } = useReservation();
   const liveChat = useChat<ConciergeAgentUIMessage>({
@@ -119,8 +121,16 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
   } = chatAdapter ?? liveChat;
 
   const busy = status === "submitted" || status === "streaming";
+  const activeChat = useRef({ busy, stop });
+  activeChat.current = { busy, stop };
+
+  useEffect(() => () => { void activeChat.current.stop(); }, []);
 
   const closePanel = useCallback(() => {
+    if (activeChat.current.busy) {
+      void activeChat.current.stop();
+      setWasCancelled(true);
+    }
     setOpen(false);
     requestAnimationFrame(() => launcherRef.current?.focus());
   }, []);
@@ -161,11 +171,11 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
   }, [open, closePanel]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView?.({
-      behavior: "smooth",
-      block: "end",
-    });
-  }, [messages, status]);
+    const container = messagesRef.current;
+    if (!container) return;
+    if (followLatest.current) container.scrollTop = container.scrollHeight;
+    else setShowLatest(container.scrollHeight - container.scrollTop - container.clientHeight > 80);
+  }, [messages, status, open, error, wasCancelled]);
 
   const submitText = useCallback(
     (text: string) => {
@@ -173,6 +183,8 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
       if (!trimmed || busy) return;
       clearError();
       setWasCancelled(false);
+      followLatest.current = true;
+      setShowLatest(false);
       void sendMessage({ text: trimmed });
       setInput("");
     },
@@ -196,13 +208,16 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
   }
 
   async function handleStop() {
-    await stop();
     setWasCancelled(true);
+    await stop();
   }
 
   function handleRetry() {
+    if (busy) return;
     clearError();
     setWasCancelled(false);
+    followLatest.current = true;
+    setShowLatest(false);
     void regenerate();
   }
 
@@ -262,9 +277,17 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
             </header>
 
             <div
+              ref={messagesRef}
               className="flex-1 space-y-4 overflow-y-auto px-4 py-5"
+              aria-label="Concierge conversation"
               aria-live="polite"
               aria-busy={busy}
+              onScroll={() => {
+                const container = messagesRef.current;
+                if (!container) return;
+                followLatest.current = container.scrollHeight - container.scrollTop - container.clientHeight <= 80;
+                if (followLatest.current) setShowLatest(false);
+              }}
             >
               {messages.length === 0 ? (
                 <div className="space-y-4">
@@ -309,6 +332,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                               }`}
                             >
                               {part.text}
+                              {busy && !wasCancelled && message.id === messages.at(-1)?.id && part.state === "streaming" ? <span aria-hidden="true" className="ml-1 inline-block motion-safe:animate-pulse">▍</span> : null}
                             </p>
                           );
                         case "tool-searchAvailableCabins":
@@ -337,6 +361,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                               key={part.toolCallId}
                               label="Availability"
                               state={part.state}
+                              interrupted={wasCancelled || !busy || message.id !== messages.at(-1)?.id}
                               errorText={part.state === "output-error" ? part.errorText : undefined}
                             />
                           );
@@ -376,6 +401,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                               key={part.toolCallId}
                               label="Cabin details"
                               state={part.state}
+                              interrupted={wasCancelled || !busy || message.id !== messages.at(-1)?.id}
                               errorText={part.state === "output-error" ? part.errorText : undefined}
                             />
                           );
@@ -396,6 +422,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                               key={part.toolCallId}
                               label="Comparison"
                               state={part.state}
+                              interrupted={wasCancelled || !busy || message.id !== messages.at(-1)?.id}
                               errorText={part.state === "output-error" ? part.errorText : undefined}
                             />
                           );
@@ -423,6 +450,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                               key={part.toolCallId}
                               label="Hotel policy"
                               state={part.state}
+                              interrupted={wasCancelled || !busy || message.id !== messages.at(-1)?.id}
                               errorText={part.state === "output-error" ? part.errorText : undefined}
                             />
                           );
@@ -440,6 +468,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                               key={part.toolCallId}
                               label="Hotel policies"
                               state={part.state}
+                              interrupted={wasCancelled || !busy || message.id !== messages.at(-1)?.id}
                               errorText={part.state === "output-error" ? part.errorText : undefined}
                             />
                           );
@@ -451,20 +480,20 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                 </div>
               ))}
 
-              {busy ? (
+              {busy && !wasCancelled ? (
                 <p className="text-sm text-primary-400" role="status">
                   Concierge is working…
                 </p>
               ) : null}
               {wasCancelled ? (
                 <div className="rounded-md border border-primary-700 bg-primary-900 p-3 text-sm text-primary-300">
-                  Response cancelled. You can edit your request and try again.
+                  Response cancelled. Received text and cards are kept and may be incomplete. You can edit your request and try again.
                 </div>
               ) : null}
               {error ? (
                 <div className="rounded-md border border-red-400/50 bg-red-950/40 p-3 text-sm text-red-100" role="alert">
                   <p>
-                    The concierge could not finish that request. Check your connection and try again.
+                    The concierge could not finish that request. Received text and cards are kept and may be incomplete. Check your connection and try again.
                   </p>
                   <button
                     type="button"
@@ -477,10 +506,13 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
               ) : null}
               {receipt ? <ResponseFeedback key={receipt.traceId} receipt={receipt} busy={busy} /> : null}
               <Link href="/cabins" onClick={closePanel} className="inline-block text-sm underline">Browse cabins without AI</Link>
-              <div ref={messagesEndRef} />
             </div>
 
             <form onSubmit={handleSubmit} className="border-t border-primary-800 p-4">
+              {showLatest ? <button type="button" className="mb-3 w-full rounded-md border border-primary-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-400" onClick={() => {
+                followLatest.current = true; setShowLatest(false);
+                if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+              }}>Jump to latest</button> : null}
               <label htmlFor="concierge-input" className="sr-only">
                 Message the AI concierge
               </label>
@@ -489,7 +521,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) {
                     event.preventDefault();
                     submitText(input);
                   }

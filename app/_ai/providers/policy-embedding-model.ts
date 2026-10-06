@@ -1,12 +1,13 @@
 import "server-only";
 
 import { createOpenAI } from "@ai-sdk/openai";
+import { createDashScopeTransport } from "./dashscope-transport";
 import { embed } from "ai";
 
 import policyConfig from "@/policy-rag.config.json";
 import { createProxyAwareFetch } from "@/app/_lib/server-fetch";
 import { policyEmbeddingProfile } from "@/scripts/policy-embedding-profile.mjs";
-import { dashscopeBaseURL, dashscopeFetch, dashscopeTransportEnvironment } from "@/scripts/dashscope-client.mjs";
+import { dashscopeBaseURL, dashscopeFetch } from "@/scripts/dashscope-client.mjs";
 
 export const POLICY_EMBEDDING_MODEL = "text-embedding-3-small" as const;
 export const POLICY_EMBEDDING_DIMENSIONS = 768 as const;
@@ -32,7 +33,7 @@ export async function embedPolicyQuery(
   if (!apiKey) throw new Error("Policy search is temporarily unavailable.");
 
   const baseURL = provider === "dashscope" ? dashscopeBaseURL(env) : undefined;
-  const fetch = dependencies.fetch ?? createProxyAwareFetch(provider === "dashscope" ? dashscopeTransportEnvironment(env) : env);
+  const fetch = dependencies.fetch ?? (provider === "dashscope" ? createDashScopeTransport(env) : createProxyAwareFetch(env));
   const openai = (dependencies.createOpenAIProvider ?? createOpenAI)({ apiKey, baseURL, fetch: baseURL ? dashscopeFetch(fetch, baseURL) : fetch });
   const result = await (dependencies.embedValue ?? embed)({
     model: openai.embedding(embeddingConfig.model),

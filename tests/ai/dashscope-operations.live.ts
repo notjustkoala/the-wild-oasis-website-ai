@@ -24,7 +24,7 @@ it("checks the real DashScope forced policy tool and post-tool stream with synth
   };
   const observer = createRunObserver({ surface: "operations", model: "qwen3.7-plus", promptVersion: "live-contract", persist: async () => true });
   const question = "严重过敏例外应该如何升级处理？请只解释流程，不要创建记录。";
-  const response = await createAgentUIStreamResponse({ agent: createOperationsAgent({ client, actorId: "synthetic", model: resolveConciergeModel(process.env, { fetch }), currentPolicyQuestion: question, observer }), uiMessages: [{ id: "user", role: "user", parts: [{ type: "text", text: question }] }], onError: () => "Sanitized model contract failure." });
+  const response = await createAgentUIStreamResponse({ agent: createOperationsAgent({ client, actorId: "synthetic", model: process.env.DASHSCOPE_LIVE_DIRECT_TRANSPORT === "1" ? resolveConciergeModel(process.env) : resolveConciergeModel(process.env, { fetch }), currentPolicyQuestion: question, observer }), uiMessages: [{ id: "user", role: "user", parts: [{ type: "text", text: question }] }], onError: () => "Sanitized model contract failure." });
   const result = await response.text();
   console.log(JSON.stringify({ event: "request-result", timings, textDeltas: (result.match(/text-delta/g) || []).length, toolOutputs: (result.match(/tool-output-available/g) || []).length, hasError: result.includes('"type":"error"') }));
   expect(result).not.toContain('"type":"error"'); expect(result).toContain('"type":"text-delta"'); expect(result).toContain("searchHotelPolicies");

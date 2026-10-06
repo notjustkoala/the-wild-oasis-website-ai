@@ -2,6 +2,14 @@ import { render, screen } from "@testing-library/react";
 import { preparePolicyQuery } from "@/app/_ai/policies/policy-query-privacy";
 import { policyEvidencePlan } from "@/app/_ai/policies/policy-evidence-plan";
 import AiAnswer from "@/app/_components/AiAnswer";
+import { cleanAiAnswer } from "@/app/_lib/ai-answer-text";
+
+it("localizes known policy labels while preserving English responses and cabin identities", () => {
+  expect(cleanAiAnswer("根据取消政策（Cancellation and refund policy），请联系酒店。小屋（Cabin 002）保持原名。"))
+    .toBe("根据取消政策，请联系酒店。小屋（Cabin 002）保持原名。");
+  expect(cleanAiAnswer("The Cancellation and refund policy applies."))
+    .toBe("The Cancellation and refund policy applies.");
+});
 
 it("accepts complete G3 grammar while rejecting unknown guest identities", () => {
   const prepared = preparePolicyQuery("入住前 7 天取消和入住前 3 天取消，分别如何收费？退款由谁处理？", { allowStaffScope: false });

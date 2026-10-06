@@ -24,6 +24,7 @@ async function ask(path, question, token, accept = "text/event-stream") {
   const response = await fetch(origin + path, { method: "POST", headers: { "content-type": "application/json", accept, ...(token ? { authorization: `Bearer ${token}`, origin: "https://the-wild-oasis-ai.vercel.app" } : {}) }, body: JSON.stringify({ messages: [{ id: randomUUID(), role: "user", parts: [{ type: "text", text: question }] }] }), signal: AbortSignal.timeout(100_000) });
   const text = await response.text();
   const events = text.split("\n").filter(line => line.startsWith("data: {")).map(line => { try { return JSON.parse(line.slice(6)); } catch { return null; } }).filter(Boolean);
+  console.log(JSON.stringify({ stage: path, status: response.status, traceId: response.headers.get("x-ai-trace-id"), finished: events.some(event => event.type === "finish"), error: events.some(event => event.type === "error"), toolOutputs: events.filter(event => event.type === "tool-output-available").length }));
   return { status: response.status, text, events, traceId: response.headers.get("x-ai-trace-id") };
 }
 function complete(result) { return result.status === 200 && !result.events.some(event => event.type === "error") && result.events.some(event => event.type === "finish" && event.finishReason === "stop") && result.events.some(event => event.type === "text-delta"); }

@@ -328,10 +328,10 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                           return (
                             <div
                               key={key}
-                              className={`whitespace-pre-wrap rounded-lg px-4 py-3 text-sm leading-6 ${
+                              className={`rounded-lg px-4 py-3 text-sm leading-6 ${
                                 message.role === "user"
-                                  ? "bg-accent-500 text-primary-950"
-                                  : "border border-primary-800 bg-primary-900 text-primary-100"
+                                  ? "whitespace-pre-wrap bg-accent-500 text-primary-950"
+                                  : "whitespace-normal border border-primary-800 bg-primary-900 text-primary-100"
                               }`}
                             >
                               {message.role === "user" ? part.text : <AiAnswer text={part.text} />}

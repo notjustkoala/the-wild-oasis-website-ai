@@ -6,6 +6,7 @@ import { CONCIERGE_GENERATE_TIMEOUT, CONCIERGE_TIMEOUT, createConciergeAbortReco
 import { authorizeOperationsStaff } from "@/app/_ai/operations-auth";
 import { operationsCors } from "@/app/_ai/operations-cors";
 import { readOperationsRequest } from "@/app/_ai/operations-request";
+import { prepareOperationsTurn } from "@/app/_ai/operations-turn";
 import { getOperationsProviderConfigurationError } from "@/app/_ai/providers/operations-model";
 import { FALLBACK_GENERATION_ERROR_DIAGNOSTIC, safeGenerationErrorDiagnostic } from "@/app/_ai/observability/error-diagnostic";
 
@@ -36,6 +37,10 @@ export async function POST(request: Request) {
   if (limited) return limited;
   run.watch(request.signal);
   const generationStartedAt = Date.now();
+  const turnMessages = prepareOperationsTurn(parsed.uiMessages, {
+    currentPolicyQuestion: parsed.currentPolicyQuestion,
+    hasBoundInternalNote: Boolean(parsed.requestedInternalNoteDraft),
+  });
   const mode = request.headers.get("accept")?.includes("application/json") ? "generate" : "stream";
   try {
     const agent = createOperationsAgent({
@@ -47,7 +52,7 @@ export async function POST(request: Request) {
       observer: run,
     });
     if (mode === "generate") {
-      const modelMessages = await convertToModelMessages(parsed.uiMessages, {
+      const modelMessages = await convertToModelMessages(turnMessages, {
         tools: agent.tools,
         ignoreIncompleteToolCalls: true,
       });
@@ -82,7 +87,7 @@ export async function POST(request: Request) {
     }
     const response = await createAgentUIStreamResponse({
       agent,
-      uiMessages: parsed.uiMessages,
+      uiMessages: turnMessages,
       abortSignal: request.signal,
       timeout: CONCIERGE_TIMEOUT,
       experimental_transform: [run.transform(request.signal), createConciergeAbortRecoveryTransform(request.signal)],

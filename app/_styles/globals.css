@@ -81,6 +81,9 @@
 .booking-calendar .rdp-footer { margin-top: .9rem; font-size: .8rem; color: #b7c6d6; }
 .booking-calendar .booking-occupied { text-decoration: line-through; color: #748799; }
 .ai-answer > * + * { margin-top: .7rem; }
+.ai-answer > :first-child { margin-top: 0; }
+.ai-answer > :last-child { margin-bottom: 0; }
+.ai-answer li + li { margin-top: .35rem; }
 .ai-answer ul, .ai-answer ol { padding-left: 1.5rem; }
 .ai-answer ul { list-style: disc; }
 .ai-answer ol { list-style: decimal; }

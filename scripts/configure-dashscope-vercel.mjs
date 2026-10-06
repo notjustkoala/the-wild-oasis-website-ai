@@ -10,10 +10,11 @@ if (!key) throw new Error("DashScope server key required.");
 const values = { DASHSCOPE_API_KEY: key, DASHSCOPE_BASE_URL: dashscopeBaseURL(), AI_PROVIDER: "dashscope", AI_POLICY_PROVIDER: "dashscope", AI_CONCIERGE_MODEL: "qwen3.7-plus", AI_OPERATIONS_MODEL: "qwen3.7-plus", AI_BOOKING_INSIGHT_MODEL: "qwen3.7-plus" };
 for (const [name, value] of Object.entries(values)) {
   const args = ["D:/Temp/wild-oasis-deploy-mucIOR/node_modules/vercel/dist/vc.js", "env", "add", name, "production,preview", "--force", "--yes", "--project", project, "--scope", "team_Antl2xUqtrFwSU0BiHcsskfO", "--global-config", "D:/Temp/wild-oasis-deploy-mucIOR/auth", "--no-color", name === "DASHSCOPE_API_KEY" ? "--sensitive" : "--no-sensitive"];
+  let diagnostic = "";
   const code = await new Promise((done, reject) => {
-    const child = spawn(process.execPath, args, { cwd: process.cwd(), env: { ...process.env, VERCEL_TELEMETRY_DISABLED: "1" }, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
-    child.stdout.resume(); child.stderr.resume(); child.on("error", () => reject(new Error("Vercel configuration command failed."))); child.on("close", done); child.stdin.end(value + "\n");
+    const child = spawn(process.execPath, args, { cwd: process.cwd(), env: { ...process.env, VERCEL_TELEMETRY_DISABLED: "1", HTTP_PROXY: "", HTTPS_PROXY: "", http_proxy: "", https_proxy: "", AI_HTTPS_PROXY: "" }, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+    child.stdout.resume(); child.stderr.on("data", data => { diagnostic += data.toString(); }); child.on("error", () => reject(new Error("Vercel configuration command failed."))); child.on("close", done); child.stdin.end(value + "\n");
   });
-  if (code !== 0) throw new Error(`Vercel configuration failed for ${name}.`);
+  if (code !== 0) { const safe = diagnostic.split("\n").filter(line => /^(Error:|> Error:)/.test(line)).join(" ").replaceAll(value, "[redacted]").replace(/(?:sk-|sb_secret_)[a-z0-9_-]+/gi,"[redacted]").slice(0,600); throw new Error(`Vercel configuration failed for ${name}. ${safe}`); }
   console.log(JSON.stringify({ variable: name, environments: ["production", "preview"], configured: true, sensitive: name === "DASHSCOPE_API_KEY" }));
 }

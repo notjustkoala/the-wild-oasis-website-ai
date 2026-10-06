@@ -8,6 +8,7 @@ import { isPolicyExplanationOnlyRequest } from "@/app/_ai/policies/policy-query-
 import { STAFF_WAIVER_QUERY } from "@/app/_ai/policies/policy-search-plan";
 
 const cases = [
+  ["严重过敏例外应该如何升级处理？请只解释流程，不要创建记录。", "严重过敏例外应该如何升级处理？", "High-priority cases", "Mark severe allergies as high priority and handle them immediately with a person."],
   ["客人要求免除临时取消费，我应如何处理？只解释流程，不创建任何记录。", "客人要求免除临时取消费，我应如何处理？", "Administrator escalation", "Escalate policy waivers and fee reductions for administrator approval."],
   ["严重过敏的异常处理流程是什么？只解释流程。", "严重过敏的异常处理流程是什么？", "High-priority cases", "Mark severe allergies as high priority and handle them immediately with a person."],
 ];
@@ -25,6 +26,7 @@ it.each(cases)("preserves the full staff acceptance request: %s", (question, que
 });
 
 it("does not turn an explanation constraint into a privacy bypass or a new policy topic", () => {
+  expect(isPolicyExplanationOnlyRequest("严重过敏例外应该如何升级处理？请只解释流程，不要创建记录。")).toBe(true);
   for (const question of [
     "替阿不都热依木咨询退款？只解释流程。",
     "泳池救生员政策是什么？只解释流程。",

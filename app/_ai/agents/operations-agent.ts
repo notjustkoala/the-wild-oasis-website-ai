@@ -9,6 +9,7 @@ import { parseOperationsDate, resolveRelativeOperationsDateRange, type Requested
 import { CONCIERGE_MODEL_MAX_RETRIES } from "@/app/_ai/providers/concierge-model";
 import { resolveOperationsModel } from "@/app/_ai/providers/operations-model";
 import { generationOptions } from "@/app/_ai/providers/generation-options";
+import { withRequiredPolicyLookup } from "@/app/_ai/providers/required-policy-lookup";
 import policyConfig from "@/policy-rag.config.json";
 import { POLICY_ANSWER_INSTRUCTIONS } from "@/app/_ai/policies/policy-answer-instructions";
 import type { RunObserver } from "@/app/_ai/observability/run";
@@ -96,7 +97,9 @@ export function createOperationsAgent({
   return new ToolLoopAgent({
     id: "wild-oasis-operations-copilot",
     onStepEnd: observer?.step,
-    model: model ?? resolveOperationsModel(),
+    model: process.env.AI_PROVIDER?.trim().toLowerCase() === "dashscope"
+      ? withRequiredPolicyLookup(model ?? resolveOperationsModel(), enforcedPolicyQuestion)
+      : model ?? resolveOperationsModel(),
     instructions: createOperationsInstructions(referenceDate),
     tools,
     experimental_refineToolInput: enforcedPolicyQuestion

@@ -54,6 +54,21 @@ function createDataSource(conflicts = [2]): ConciergeInventoryDataSource {
 }
 
 describe("concierge inventory service", () => {
+  it("returns only three trusted candidates from a larger available inventory", async () => {
+    const source = createDataSource([]);
+    source.listCabins = vi.fn(async () => [...cabins,
+      { ...cabins[0], id: 4, regularPrice: 200, discount: 0 },
+      { ...cabins[0], id: 5, regularPrice: 500, discount: 0 },
+    ]);
+    const result = await createConciergeInventoryService(source).searchAvailableCabins({
+      startDate: "2027-01-10", endDate: "2027-01-13", numGuests: 2, maxTotalPrice: 1200, preferences: [],
+    });
+    expect(result.recommendations.map(row => row.cabinId)).toEqual([3, 4, 1]);
+    expect(result.recommendations.map(row => row.totalPrice)).toEqual([480, 600, 750]);
+    expect(result.sourceIds).not.toContain("cabins:5");
+    expect(result.facts.join(" ")).toContain("not the full inventory");
+  });
+
   it("classifies a two-night stay below the live minimum as application validation", async () => {
     const source = createDataSource();
     source.getSettings = vi.fn(async () => ({ id: 1, minBookingLength: 3, maxBookingLength: 30, maxGuestsPerBooking: 10, breakfastPrice: 15 }));

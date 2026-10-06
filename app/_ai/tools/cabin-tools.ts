@@ -246,7 +246,7 @@ export function createConciergeInventoryService(
         .sort((a, b) => {
           if (a.withinBudget !== b.withinBudget) return a.withinBudget ? -1 : 1;
           return a.totalPrice - b.totalPrice;
-        });
+        }).slice(0, 3);
 
       return {
         kind: "cabin-search",
@@ -259,7 +259,7 @@ export function createConciergeInventoryService(
         recommendations,
         facts: recommendations.length
           ? [
-              `${recommendations.length} cabins are available for the requested half-open stay range.`,
+              `Showing ${recommendations.length} recommended available cabins for the requested half-open stay range (at most 3 recommendations, not the full inventory).`,
               "Prices are calculated by trusted application code from current cabin records.",
             ]
           : ["No cabin currently satisfies the dates and guest count."],

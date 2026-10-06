@@ -1,7 +1,8 @@
+@import "react-day-picker/style.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import "react-day-picker/style.css";
+
 
 @layer components {
   .spinner {
@@ -66,10 +67,22 @@
   }
 }
 
-/* For data picker */
-.rdp {
-  --rdp-cell-size: 32px !important;
-  --rdp-accent-color: theme("colors.accent.500") !important;
-  --rdp-background-color: theme("colors.accent.600") !important;
-  margin: 0 !important;
-}
+
+.booking-calendar { --rdp-accent-color: #c69963; --rdp-accent-background-color: #2c3d4f; --rdp-day-height: 40px; --rdp-day-width: 40px; --rdp-day_button-height: 38px; --rdp-day_button-width: 38px; --rdp-range_middle-background-color: #3c5063; --rdp-range_middle-color: #eef2f6; --rdp-range_start-color: #141c24; --rdp-range_end-color: #141c24; --rdp-selected-border: 2px solid #e1be8c; margin: 0; font-size: 0.95rem; }
+.booking-calendar .rdp-months { gap: 1.4rem; }
+.booking-calendar .rdp-month_caption { font-size: 1rem; }
+.booking-calendar .rdp-dropdowns { gap: .45rem; }
+.booking-calendar .rdp-dropdown_root { border: 1px solid #4c6176; border-radius: .5rem; padding: .3rem .45rem; }
+.booking-calendar select { background: #1b2631; color: #eef2f6; }
+.booking-calendar .rdp-day_button { border-radius: .5rem; }
+.booking-calendar .rdp-selected { font-size: inherit; font-weight: 700; }
+.booking-calendar .rdp-range_start .rdp-day_button, .booking-calendar .rdp-range_end .rdp-day_button { background: #c69963; color: #141c24; }
+.booking-calendar .rdp-button_next, .booking-calendar .rdp-button_previous { border: 1px solid #4c6176; border-radius: .5rem; }
+.booking-calendar .rdp-footer { margin-top: .9rem; font-size: .8rem; color: #b7c6d6; }
+.booking-calendar .booking-occupied { text-decoration: line-through; color: #748799; }
+.ai-answer > * + * { margin-top: .7rem; }
+.ai-answer ul, .ai-answer ol { padding-left: 1.5rem; }
+.ai-answer ul { list-style: disc; }
+.ai-answer ol { list-style: decimal; }
+.ai-answer h3, .ai-answer h4 { font-weight: 700; }
+.ai-answer pre { white-space: pre-wrap; overflow-wrap: anywhere; }

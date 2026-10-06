@@ -1,81 +1,83 @@
 "use client";
 
-import { isPast } from "date-fns";
+import { useEffect, useRef, useState } from "react";
+import { addYears, differenceInCalendarDays, format, isBefore, startOfDay, startOfMonth } from "date-fns";
 import { DayPicker } from "react-day-picker";
-import "react-day-picker/dist/style.css";
 import { useReservation } from "./ReservationContext";
-import {
-  getStayQuote,
-  isStayRangeAvailable,
-} from "../_lib/booking-domain";
+import { getStayQuote, isStayRangeAvailable } from "../_lib/booking-domain";
 import PriceSummary from "./PriceSummary";
 
-function DateSelector({ settings, cabin, bookedDates }) {
+export default function DateSelector({ settings, cabin, bookedDates }) {
   const { range, setRange, resetRange, draft } = useReservation();
+  const today = startOfDay(new Date());
+  const container = useRef(null);
+  const [months, setMonths] = useState(1);
+  const [month, setMonth] = useState(() => startOfMonth(range?.from ?? today));
+  const [notice, setNotice] = useState("");
+  const { minBookingLength: min, maxBookingLength: max } = settings;
+  const quote = getStayQuote({ startDate: range?.from, endDate: range?.to, regularPrice: cabin.regularPrice, discount: cabin.discount });
 
-  const { regularPrice, discount } = cabin;
-  const quote = getStayQuote({
-    startDate: range?.from,
-    endDate: range?.to,
-    regularPrice,
-    discount,
-  });
-
-  const { minBookingLength, maxBookingLength } = settings;
-
-  function handleSelect(nextRange) {
-    if (!nextRange) {
-      resetRange();
-      return;
+  useEffect(() => {
+    if (draft && draft.cabinId === cabin.id && draft.startDate) {
+      const [year, monthNumber, day] = draft.startDate.split("-").map(Number);
+      setMonth(startOfMonth(new Date(year, monthNumber - 1, day)));
+      setNotice("");
     }
+  }, [draft, cabin.id]);
 
-    if (isStayRangeAvailable(nextRange, bookedDates)) setRange(nextRange);
+  useEffect(() => {
+    if (!container.current || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(entries => setMonths(entries[0].contentRect.width >= 620 ? 2 : 1));
+    observer.observe(container.current);
+    return () => observer.disconnect();
+  }, []);
+
+  function disabled(day) {
+    if (isBefore(day, today)) return true;
+    // An occupied night can still be a valid checkout boundary. The half-open
+    // booking validator remains authoritative; never disable that boundary blindly.
+    if (range?.from && !range?.to && day > range.from) {
+      const nights = differenceInCalendarDays(day, range.from);
+      return nights < min || nights > max || !isStayRangeAvailable({ from: range.from, to: day }, bookedDates);
+    }
+    return false;
   }
 
-  return (
-    <div className="flex flex-col justify-between">
-      {draft?.cabinId === cabin.id ? (
-        <p className="px-8 pt-5 text-sm text-accent-300" role="status">
-          AI plan applied. Review the dates before reserving.
-        </p>
-      ) : null}
-      <DayPicker
-        className="py-9 px-24 "
-        mode="range"
-        onSelect={handleSelect}
-        selected={range}
-        min={minBookingLength}
-        max={maxBookingLength}
-        fromMonth={new Date()}
-        fromDate={new Date()}
-        toYear={new Date().getFullYear() + 5}
-        captionLayout="dropdown"
-        numberOfMonths={2}
-        disabled={isPast}
-        modifiers={{ occupied: bookedDates }}
-        modifiersClassNames={{
-          occupied: "line-through text-primary-400",
-        }}
-      />
+  function handleSelect(nextRange, clickedDay) {
+    setNotice("");
+    if (!nextRange) { resetRange(); return; }
+    if (clickedDay && range?.from && range?.to) {
+      if (bookedDates.some(date => startOfDay(new Date(date)).getTime() === startOfDay(clickedDay).getTime())) {
+        setNotice("This night is booked. Choose another check-in date."); return;
+      }
+      setRange({ from: clickedDay, to: undefined }); return;
+    }
+    if (!isStayRangeAvailable(nextRange, bookedDates)) {
+      setNotice("Those dates include a booked night. Please choose another range."); return;
+    }
+    setRange(nextRange);
+  }
 
-      <div className="flex items-center justify-between px-8 bg-accent-500 text-primary-800 h-[72px]">
-        <PriceSummary
-          regularPrice={regularPrice}
-          discount={discount}
-          quote={quote}
-        />
-
-        {range.from || range.to ? (
-          <button
-            className="border border-primary-800 py-2 px-4 text-sm font-semibold"
-            onClick={resetRange}
-          >
-            Clear
-          </button>
-        ) : null}
-      </div>
+  return <section ref={container} className="min-w-0 flex flex-col" aria-label="Stay dates">
+    {draft && draft.cabinId === cabin.id ? <p className="px-6 pt-5 text-sm text-accent-300" role="status">AI plan applied. Review the selected dates before reserving.</p> : null}
+    <div className="grid grid-cols-2 gap-3 px-6 pt-5">
+      <div className="rounded-lg border border-primary-700 bg-primary-900 p-3"><span className="block text-xs text-primary-300">Check-in</span><strong>{range?.from ? format(range.from, "MMM d, yyyy") : "Choose date"}</strong></div>
+      <div className="rounded-lg border border-primary-700 bg-primary-900 p-3"><span className="block text-xs text-primary-300">Check-out</span><strong>{range?.to ? format(range.to, "MMM d, yyyy") : "Choose date"}</strong></div>
     </div>
-  );
+    <p className="px-6 pt-3 text-sm text-primary-300">Select check-in, then check-out · {min}–{max} nights. Click a date to start a new selection.</p>
+    <div className="flex min-w-0 justify-center px-3 py-5">
+      <DayPicker className="booking-calendar" mode="range" month={month} onMonthChange={setMonth}
+        selected={range} onSelect={handleSelect} min={min} max={max}
+        startMonth={startOfMonth(today)} endMonth={startOfMonth(addYears(today, 5))}
+        captionLayout="dropdown" navLayout="after" numberOfMonths={months} showOutsideDays={false}
+        disabled={disabled} modifiers={{ occupied: bookedDates }}
+        modifiersClassNames={{ occupied: "booking-occupied" }}
+        footer={range?.from && range?.to ? `${quote.numNights} nights selected` : range?.from ? "Now choose your check-out date" : "Choose your check-in date"} />
+    </div>
+    {notice ? <p role="alert" className="px-6 pb-4 text-sm text-amber-300">{notice}</p> : null}
+    <div className="mt-auto flex min-h-[72px] flex-wrap items-center justify-between gap-3 bg-accent-500 px-6 py-4 text-primary-800">
+      <PriceSummary regularPrice={cabin.regularPrice} discount={cabin.discount} quote={quote} />
+      {range?.from || range?.to ? <button type="button" className="rounded-md border border-primary-800 px-4 py-2 text-sm font-semibold" onClick={() => { resetRange(); setNotice(""); }}>Clear dates</button> : null}
+    </div>
+  </section>;
 }
-
-export default DateSelector;

@@ -14,7 +14,7 @@ export default function PriceSummary({
   quote,
 }: PriceSummaryProps) {
   return (
-    <div className="flex items-baseline gap-6">
+    <div className="flex min-w-0 flex-wrap items-baseline gap-3 sm:gap-6">
       <p className="flex gap-2 items-baseline">
         <span className="text-2xl">${quote.nightlyPrice}</span>
         {discount > 0 ? (

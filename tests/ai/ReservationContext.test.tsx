@@ -33,7 +33,7 @@ describe("AI reservation draft", () => {
     ).toThrow(/Checkout/);
 
     const contextSource = readFileSync(
-      join(process.cwd(), "app/_components/ReservationContext.js"),
+      join(process.cwd(), "app/_components/ReservationContext.jsx"),
       "utf8"
     );
     expect(contextSource).toMatch(/adoptDraft/);

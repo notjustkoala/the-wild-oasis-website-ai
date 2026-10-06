@@ -1,5 +1,6 @@
 "use client";
 
+import AiAnswer from "../AiAnswer";
 import { useChat, type UseChatHelpers } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { useRouter } from "next/navigation";
@@ -325,7 +326,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                       switch (part.type) {
                         case "text":
                           return (
-                            <p
+                            <div
                               key={key}
                               className={`whitespace-pre-wrap rounded-lg px-4 py-3 text-sm leading-6 ${
                                 message.role === "user"
@@ -333,9 +334,9 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                                   : "border border-primary-800 bg-primary-900 text-primary-100"
                               }`}
                             >
-                              {part.text}
+                              {message.role === "user" ? part.text : <AiAnswer text={part.text} />}
                               {busy && !wasCancelled && message.id === messages.at(-1)?.id && part.state === "streaming" ? <span aria-hidden="true" className="ml-1 inline-block motion-safe:animate-pulse">▍</span> : null}
-                            </p>
+                            </div>
                           );
                         case "tool-searchAvailableCabins":
                           if (part.state === "output-available") {

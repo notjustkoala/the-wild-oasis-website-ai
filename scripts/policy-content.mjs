@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { policyEmbeddingProfile } from "./policy-embedding-profile.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 export const PROJECT_ROOT = resolve(SCRIPT_DIR, "..");
@@ -17,11 +18,10 @@ export function hashPolicyValue(value) {
   return createHash("sha256").update(normalizePolicyText(value), "utf8").digest("hex");
 }
 
-export async function loadPolicyConfig(root = PROJECT_ROOT) {
+export async function loadPolicyConfig(root = PROJECT_ROOT, env = process.env) {
   const config = JSON.parse(await readFile(join(root, "policy-rag.config.json"), "utf8"));
-  if (config?.embedding?.model !== "text-embedding-3-small" || config?.embedding?.dimensions !== 768) {
-    throw new Error("Policy embedding configuration must use text-embedding-3-small with 768 dimensions.");
-  }
+  const { embedding } = policyEmbeddingProfile(config, env);
+  config.embedding = embedding;
   const { maxCharacters, overlapCharacters } = config.chunking ?? {};
   if (!Number.isInteger(maxCharacters) || maxCharacters < 300 || maxCharacters > 2_000) {
     throw new Error("chunking.maxCharacters must be an integer from 300 to 2000.");
@@ -171,8 +171,8 @@ async function markdownFiles(directory) {
   return files;
 }
 
-export async function loadPolicyDocuments({ root = PROJECT_ROOT, policyRoot = join(root, "content", "policies") } = {}) {
-  const config = await loadPolicyConfig(root);
+export async function loadPolicyDocuments({ root = PROJECT_ROOT, policyRoot = join(root, "content", "policies"), env = process.env } = {}) {
+  const config = await loadPolicyConfig(root, env);
   const files = await markdownFiles(policyRoot);
   const documents = [];
   const ids = new Set();

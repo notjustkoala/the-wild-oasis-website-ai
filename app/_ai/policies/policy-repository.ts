@@ -1,6 +1,7 @@
 import "server-only";
 
 import policyConfig from "@/policy-rag.config.json";
+import { policyEmbeddingProfile, policyRetrievalConfiguration } from "@/scripts/policy-embedding-profile.mjs";
 import {
   policyCitationSchema,
   type PolicyCitation,
@@ -74,6 +75,7 @@ export async function matchPolicyChunks({
   embedding: number[];
 }): Promise<PolicyMatch[]> {
   try {
+    const { embedding: embeddingConfig } = policyEmbeddingProfile(policyConfig);
     if (!client || typeof client.rpc !== "function") {
       throw new Error(POLICY_REPOSITORY_ERROR);
     }
@@ -83,11 +85,11 @@ export async function matchPolicyChunks({
         policyConfig.retrieval.maximumQuestionCharacters
       ),
       query_embedding: embedding,
-      requested_embedding_model: policyConfig.embedding.model,
-      requested_document_instruction_version: policyConfig.embedding.documentInstructionVersion,
+      requested_embedding_model: embeddingConfig.model,
+      requested_document_instruction_version: embeddingConfig.documentInstructionVersion,
       result_count: Math.min(policyConfig.retrieval.matchCount + 1, 6),
       minimum_similarity:
-        policyConfig.retrieval.minimumSemanticSimilarity,
+        policyRetrievalConfiguration(policyConfig).minimumSemanticSimilarity,
     });
     if (error || !Array.isArray(data)) throw new Error(POLICY_REPOSITORY_ERROR);
     const parsed = data.map(parseMatch);

@@ -7,6 +7,7 @@ import { embedMany } from "ai";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 
 import { loadPolicyDocuments } from "./policy-content.mjs";
+import { dashscopeBaseURL, dashscopeFetch, dashscopeTransportEnvironment } from "./dashscope-client.mjs";
 
 const MODES = new Set(["--dry-run", "--apply"]);
 
@@ -57,8 +58,9 @@ export function resolvePolicyIngestionEnvironment(env, apply) {
     throw new Error(`A public or anonymous Supabase key cannot be used for ${apply ? "--apply" : "--dry-run"}.`);
   }
   if (!apply) return { url, key: secretKey, googleKey: null };
-  const openaiKey = env.OPENAI_API_KEY?.trim();
-  if (!openaiKey) throw new Error("OPENAI_API_KEY is required for --apply.");
+  const dashscope = env.AI_POLICY_PROVIDER === "dashscope" || (!env.AI_POLICY_PROVIDER && env.AI_PROVIDER === "dashscope");
+  const openaiKey = (dashscope ? env.DASHSCOPE_API_KEY : env.OPENAI_API_KEY)?.trim();
+  if (!openaiKey) throw new Error(`${dashscope ? "DASHSCOPE_API_KEY" : "OPENAI_API_KEY"} is required for --apply.`);
   return { url, key: secretKey, openaiKey };
 }
 
@@ -180,20 +182,33 @@ export async function generatePolicyEmbeddings(plan, config, apiKey, dependencie
     .flatMap((document) => document.chunks.filter((chunk) => chunk.action === "embed").map((chunk) => ({ document, chunk })));
   if (!pending.length) return;
   try {
-    const isOpenAI = config.embedding.model === "text-embedding-3-small";
-    const provider = (isOpenAI ? dependencies.createOpenAIProvider ?? createOpenAI : dependencies.createGoogleProvider ?? createGoogle)({ apiKey, fetch: dependencies.fetch ?? proxyAwareFetch(dependencies.env ?? process.env) });
-    const result = await (dependencies.embedValues ?? embedMany)({
-      model: provider.embedding(config.embedding.model),
-      values: pending.map(({ document, chunk }) => `${document.title}\n${chunk.section}\n${chunk.content}`),
-      maxParallelCalls: 2,
-      maxRetries: 0,
-      providerOptions: isOpenAI ? { openai: { dimensions: config.embedding.dimensions } } : { google: { outputDimensionality: config.embedding.dimensions, taskType: "RETRIEVAL_DOCUMENT" } },
-    });
+    const isDashScope = config.embedding.model === "text-embedding-v4";
+    const isOpenAI = config.embedding.model === "text-embedding-3-small" || isDashScope;
+    const env = dependencies.env ?? process.env;
+    const baseURL = isDashScope ? dashscopeBaseURL(env) : undefined;
+    const fetch = dependencies.fetch ?? proxyAwareFetch(isDashScope ? dashscopeTransportEnvironment(env) : env);
+    const provider = (isOpenAI ? dependencies.createOpenAIProvider ?? createOpenAI : dependencies.createGoogleProvider ?? createGoogle)({ apiKey, baseURL, fetch: baseURL ? dashscopeFetch(fetch, baseURL) : fetch });
+    const embeddings = [];
+    let inputTokens = 0, hasUsage = true;
+    const batchSize = isDashScope ? 10 : pending.length;
+    for (let offset = 0; offset < pending.length; offset += batchSize) {
+      const result = await (dependencies.embedValues ?? embedMany)({
+        model: provider.embedding(config.embedding.model),
+        values: pending.slice(offset, offset + batchSize).map(({ document, chunk }) => `${document.title}\n${chunk.section}\n${chunk.content}`),
+        maxParallelCalls: 1, maxRetries: 0, abortSignal: AbortSignal.timeout(30_000),
+        providerOptions: isOpenAI ? { openai: { dimensions: config.embedding.dimensions } } : { google: { outputDimensionality: config.embedding.dimensions, taskType: "RETRIEVAL_DOCUMENT" } },
+      });
+      if (result.embeddings.length !== Math.min(batchSize, pending.length - offset)) throw new Error("invalid embedding response");
+      embeddings.push(...result.embeddings);
+      if (Number.isSafeInteger(result.usage?.tokens) && result.usage.tokens >= 0) inputTokens += result.usage.tokens;
+      else hasUsage = false;
+    }
+    const result = { embeddings };
     if (result.embeddings.length !== pending.length || result.embeddings.some((embedding) => embedding.length !== config.embedding.dimensions || embedding.some((item) => !Number.isFinite(item)))) {
       throw new Error("invalid embedding response");
     }
     pending.forEach(({ chunk }, index) => { chunk.embedding = result.embeddings[index]; });
-    return { inputTokens: result.usage?.tokens ?? null };
+    return { inputTokens: hasUsage ? inputTokens : null };
   } catch {
     throw new Error("Policy embeddings could not be generated.");
   }
@@ -253,7 +268,7 @@ export async function runPolicyIngestion({
   const mode = parsePolicyIngestionMode(args);
   if (env === process.env) loadLocalEnv();
   const runtime = resolvePolicyIngestionEnvironment(env, mode === "--apply");
-  const { config, documents } = await loadDocuments();
+  const { config, documents } = await loadDocuments({ env });
   let client;
   try {
     client = clientFactory(runtime.url, runtime.key, { auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false } });

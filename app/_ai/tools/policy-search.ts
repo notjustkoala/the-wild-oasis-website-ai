@@ -3,6 +3,8 @@ import "server-only";
 import { tool } from "ai";
 
 import policyConfig from "@/policy-rag.config.json";
+import { policyEvidencePlan } from "@/app/_ai/policies/policy-evidence-plan";
+import { policyEmbeddingProfile, policyRetrievalConfiguration } from "@/scripts/policy-embedding-profile.mjs";
 import { embedPolicyQuery } from "@/app/_ai/providers/policy-embedding-model";
 import { preparePolicyQuery } from "@/app/_ai/policies/policy-query-privacy";
 import { needsStaffWaiverEvidence, STAFF_WAIVER_QUERY } from "@/app/_ai/policies/policy-search-plan";
@@ -43,6 +45,8 @@ export function createPolicySearchService({
   search = matchPolicyChunks,
 }: PolicySearchDependencies) {
   const permitted = new Set<PolicyScope>(allowedScopes);
+  const { provider } = policyEmbeddingProfile(policyConfig);
+  const retrieval = policyRetrievalConfiguration(policyConfig);
   return async function searchHotelPolicies({
     question,
   }: {
@@ -56,7 +60,7 @@ export function createPolicySearchService({
     try {
       const needsWaiverSop = permitted.has("staff")
         && needsStaffWaiverEvidence(prepared.sanitized);
-      const retrieve = async (queryText: string) => {
+      const retrieve = async (queryText: string, documentIds?: string[]) => {
         const embedding = await embedQuery(queryText);
         if (
           embedding.length !== policyConfig.embedding.dimensions ||
@@ -66,19 +70,21 @@ export function createPolicySearchService({
         if (matches.some((match) => !permitted.has(match.citation.scope))) {
           throw new Error("Policy evidence unavailable.");
         }
-        const bestSimilarity = Math.max(...matches.map((match) => match.semanticSimilarity));
-        return matches.filter((match) =>
-          match.semanticSimilarity >= policyConfig.retrieval.minimumSemanticSimilarity
-          && bestSimilarity - match.semanticSimilarity <= policyConfig.retrieval.maximumSemanticDistanceFromBest
+        const relevant = documentIds ? matches.filter(match => documentIds.includes(match.citation.documentId)) : matches;
+        const bestSimilarity = Math.max(...relevant.map((match) => match.semanticSimilarity));
+        return relevant.filter((match) =>
+          match.semanticSimilarity >= retrieval.minimumSemanticSimilarity
+          && bestSimilarity - match.semanticSimilarity <= retrieval.maximumSemanticDistanceFromBest
         );
       };
       // Distinct evidence facets, not model-driven retries. Both use the same
       // authenticated RLS client and the same evidence thresholds.
-      const [primaryMatches, waiverMatches] = await Promise.all([
-        retrieve(prepared.sanitized),
-        needsWaiverSop ? retrieve(STAFF_WAIVER_QUERY) : Promise.resolve([]),
-      ]);
-      const staffMatches = waiverMatches.filter((match) => match.citation.scope === "staff");
+      const facets = provider === "dashscope" ? policyEvidencePlan(prepared.sanitized, permitted.has("staff")) : [];
+      if (provider === "dashscope" && facets.length === 0) return INSUFFICIENT;
+      const [primaryMatches, waiverMatches] = provider === "dashscope"
+        ? [ (await Promise.all(facets.map(facet => retrieve(facet.query, facet.documentIds)))).flat(), [] as PolicyMatch[] ]
+        : await Promise.all([retrieve(prepared.sanitized), needsWaiverSop ? retrieve(STAFF_WAIVER_QUERY) : Promise.resolve([])]);
+      const staffMatches = (provider === "dashscope" ? primaryMatches : waiverMatches).filter((match) => match.citation.scope === "staff");
       // Public refund-review rules alone do not establish who may waive a fee.
       if (needsWaiverSop && staffMatches.length === 0) return INSUFFICIENT;
       const seen = new Set<string>();

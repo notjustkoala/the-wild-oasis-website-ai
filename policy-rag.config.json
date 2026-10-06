@@ -5,6 +5,14 @@
     "documentInstructionVersion": "openai-policy-document-v1",
     "queryInstructionVersion": "openai-policy-query-v1"
   },
+  "embeddingProfiles": {
+    "dashscope": {
+      "model": "text-embedding-v4",
+      "dimensions": 768,
+      "documentInstructionVersion": "dashscope-policy-document-v1",
+      "queryInstructionVersion": "dashscope-policy-query-v1"
+    }
+  },
   "chunking": {
     "version": "heading-paragraph-v1",
     "maxCharacters": 900,
@@ -21,5 +29,11 @@
     "maximumQuestionCharacters": 500,
     "maximumExcerptCharacters": 420,
     "maximumContextCharacters": 2400
+  },
+  "retrievalProfiles": {
+    "dashscope": {
+      "minimumSemanticSimilarity": 0.45,
+      "maximumSemanticDistanceFromBest": 0.2
+    }
   }
 }

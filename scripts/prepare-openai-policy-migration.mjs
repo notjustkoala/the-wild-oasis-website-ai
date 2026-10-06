@@ -13,7 +13,7 @@ export async function prepareOpenAIPolicyMigration({ args = process.argv.slice(2
   const [mode, flag, rawBudget] = args;
   if (mode !== "--dry-run" && mode !== "--prepare") throw new Error("Use --dry-run or --prepare --max-usd <budget>.");
   if (mode === "--dry-run" && args.length !== 1 || mode === "--prepare" && (args.length !== 3 || flag !== "--max-usd")) throw new Error("Invalid migration preparation arguments.");
-  const { config, documents } = await loadPolicyDocuments();
+  const { config, documents } = await loadPolicyDocuments({ env: { ...env, AI_POLICY_PROVIDER: "openai" } });
   const chunks = documents.flatMap(document => document.chunks);
   const byteBound = documents.reduce((sum, document) => sum + document.chunks.reduce((total, chunk) => total + Buffer.byteLength(`${document.title}\n${chunk.section}\n${chunk.content}`, "utf8") + 8, 0), 0);
   const estimatedInputUSD = byteBound * EMBEDDING_INPUT_USD_PER_MILLION / 1_000_000;

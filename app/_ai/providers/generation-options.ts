@@ -4,7 +4,12 @@ import { createHash } from "node:crypto";
 
 export type GenerationSurface = "concierge" | "operations" | "booking-insight";
 export function generationOptions(surface: GenerationSurface, env: NodeJS.ProcessEnv = process.env) {
-  if ((env.AI_PROVIDER?.trim().toLowerCase() || DEFAULT_AI_PROVIDER) !== "openai") return {};
+  const provider = env.AI_PROVIDER?.trim().toLowerCase() || DEFAULT_AI_PROVIDER;
+  if (provider === "dashscope") return {
+    maxOutputTokens: surface === "booking-insight" ? 2048 : 4096,
+    providerOptions: { openai: { strictJsonSchema: true, parallelToolCalls: false, systemMessageMode: "system" as const, reasoningEffort: undefined, serviceTier: undefined } },
+  };
+  if (provider !== "openai") return {};
   const key = surface === "concierge" ? "AI_CONCIERGE_REASONING_EFFORT" : surface === "operations" ? "AI_OPERATIONS_REASONING_EFFORT" : "AI_BOOKING_INSIGHT_REASONING_EFFORT";
   const effort = env[key]?.trim() || "low";
   if (!["none", "low", "medium", "high", "xhigh", "max"].includes(effort)) throw new Error("Invalid generation reasoning effort.");

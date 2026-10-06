@@ -1,0 +1,309 @@
+{
+  "date": "2026-10-06",
+  "project": "fadfglcobmxxsawxlmpb",
+  "provider": "dashscope",
+  "model": "text-embedding-v4",
+  "dimensions": 768,
+  "minimumSemanticSimilarity": 0.45,
+  "maximumSemanticDistanceFromBest": 0.2,
+  "cases": [
+    {
+      "id": "pet-weight-en",
+      "documents": [
+        "pet-policy"
+      ],
+      "sections": [
+        "Fee and conduct",
+        "Eligible pets and limits"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "pet-count-zh",
+      "documents": [
+        "pet-policy"
+      ],
+      "sections": [
+        "Fee and conduct",
+        "Eligible pets and limits"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "cancel-seven-en",
+      "documents": [
+        "cancellation-refund"
+      ],
+      "sections": [
+        "Review and processing",
+        "Cancellation charges"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "cancel-three-zh",
+      "documents": [
+        "cancellation-refund"
+      ],
+      "sections": [
+        "Review and processing",
+        "Cancellation charges"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "checkin-time-en",
+      "documents": [
+        "check-in-check-out"
+      ],
+      "sections": [
+        "Early arrival and late departure",
+        "Standard times"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "late-checkout-zh",
+      "documents": [
+        "check-in-check-out"
+      ],
+      "sections": [
+        "Early arrival and late departure",
+        "Standard times"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "payment-en",
+      "documents": [
+        "payment-policy"
+      ],
+      "sections": [
+        "When payment is due",
+        "Payment safety"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "payment-zh",
+      "documents": [
+        "payment-policy"
+      ],
+      "sections": [
+        "When payment is due",
+        "Payment safety"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "service-animal-zh",
+      "documents": [
+        "pet-policy",
+        "accessibility"
+      ],
+      "sections": [
+        "Fee and conduct",
+        "Eligible pets and limits",
+        "Requesting support",
+        "Confirmation and service animals"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "accessibility-en",
+      "documents": [
+        "accessibility"
+      ],
+      "sections": [
+        "Requesting support",
+        "Confirmation and service animals"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "breakfast-live-price",
+      "documents": [
+        "breakfast-dietary"
+      ],
+      "sections": [
+        "Optional breakfast",
+        "Dietary requests"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "cross-cancel-payment",
+      "documents": [
+        "cancellation-refund",
+        "payment-policy"
+      ],
+      "sections": [
+        "Review and processing",
+        "Cancellation charges",
+        "When payment is due",
+        "Payment safety"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "cancel-all-free-zh",
+      "documents": [
+        "cancellation-refund"
+      ],
+      "sections": [
+        "Review and processing",
+        "Cancellation charges"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "staff-waiver",
+      "documents": [
+        "cancellation-refund",
+        "exception-handling-sop"
+      ],
+      "sections": [
+        "Review and processing",
+        "Cancellation charges",
+        "Administrator escalation",
+        "Initial review",
+        "High-priority cases",
+        "AI boundary"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "staff-allergy-zh",
+      "documents": [
+        "breakfast-dietary",
+        "exception-handling-sop"
+      ],
+      "sections": [
+        "Dietary requests",
+        "Administrator escalation",
+        "Initial review",
+        "High-priority cases",
+        "AI boundary"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "guest-staff-injection",
+      "documents": [],
+      "sections": [],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "guest-staff-injection-zh",
+      "documents": [],
+      "sections": [],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "staff-sop-override-zh",
+      "documents": [
+        "exception-handling-sop"
+      ],
+      "sections": [
+        "Administrator escalation",
+        "Initial review",
+        "High-priority cases",
+        "AI boundary"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "unknown-lifeguard",
+      "documents": [],
+      "sections": [],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "unknown-lifeguard-zh",
+      "documents": [],
+      "sections": [],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "unknown-lifeguard-staff-zh",
+      "documents": [],
+      "sections": [],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "cancel-all-free-staff-zh",
+      "documents": [
+        "cancellation-refund"
+      ],
+      "sections": [
+        "Review and processing",
+        "Cancellation charges"
+      ],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "unknown-shuttle-zh",
+      "documents": [],
+      "sections": [],
+      "pass": true,
+      "leakage": false
+    },
+    {
+      "id": "conflicting-old-version",
+      "documents": [
+        "pet-policy"
+      ],
+      "sections": [
+        "Fee and conduct",
+        "Eligible pets and limits"
+      ],
+      "pass": true,
+      "leakage": false
+    }
+  ],
+  "isolation": [
+    {
+      "documents": 6,
+      "role_name": "anon",
+      "staff_documents": 0
+    },
+    {
+      "documents": 6,
+      "role_name": "ordinary",
+      "staff_documents": 0
+    },
+    {
+      "documents": 7,
+      "role_name": "staff",
+      "staff_documents": 1
+    },
+    {
+      "documents": 7,
+      "role_name": "admin",
+      "staff_documents": 1
+    }
+  ],
+  "notes": "Real DashScope embeddings and Postgres RPC/RLS in a rollback transaction; fixed synthetic queries and JWT claims, not an end-to-end login/browser evaluation."
+}

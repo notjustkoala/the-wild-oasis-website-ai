@@ -24,7 +24,9 @@
     "policies:check": "node scripts/check-policies.mjs",
     "policies:ingest": "node scripts/ingest-policies.mjs",
     "policies:prepare-openai": "node scripts/prepare-openai-policy-migration.mjs",
-    "policies:verify-access": "node scripts/verify-policy-access.mjs"
+    "policies:verify-access": "node scripts/verify-policy-access.mjs",
+    "ai:check-dashscope": "node scripts/check-dashscope-connection.mjs",
+    "policies:prepare-dashscope": "node scripts/prepare-dashscope-policy-migration.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "4.0.42",

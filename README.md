@@ -83,10 +83,9 @@ Required variables are documented in `.env.example`:
 - `SUPABASE_SECRET_KEY` (server runtime only)
 - `NEXTAUTH_SECRET`
 - `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`
-- `AI_PROVIDER=openai` and `OPENAI_API_KEY` for live AI generation and embeddings
-  requests (server runtime only)
-- `AI_CONCIERGE_MODEL`, `AI_OPERATIONS_MODEL`, `AI_BOOKING_INSIGHT_MODEL`: `gpt-6-luna`
-- per-workflow `AI_*_REASONING_EFFORT=low`; Responses uses Standard processing and `store: false`
+- `AI_PROVIDER=dashscope`, `DASHSCOPE_API_KEY` and `DASHSCOPE_BASE_URL` (server runtime only)
+- `AI_CONCIERGE_MODEL`, `AI_OPERATIONS_MODEL`, `AI_BOOKING_INSIGHT_MODEL`: `qwen3.7-plus`
+- `AI_POLICY_PROVIDER=dashscope`: version-controlled `text-embedding-v4` / 768 profile
 
 `SUPABASE_KEY` is a compatibility fallback for a legacy low-privilege anon
 key. `SUPABASE_SERVICE_ROLE_KEY` is accepted only as a legacy server-only
@@ -97,37 +96,57 @@ committed. Local environment files are ignored by Git.
 ## AI concierge
 
 The global **Ask AI concierge** launcher streams an AI SDK `ToolLoopAgent`.
-The migration target is OpenAI Responses with `gpt-6-luna` for all three
-generation workflows and `text-embedding-3-small` with 768 dimensions for policy
-retrieval. Google/Gateway generation branches remain available for explicit
-legacy configuration. Configure `AI_PROVIDER=openai` to select the new provider;
-there is no automatic model upgrade or provider failover.
+The current connection target is Alibaba Cloud Model Studio (DashScope Beijing):
+Qwen3.7-Plus Chat Completions for all three generation workflows, with thinking
+explicitly disabled; text-embedding-v4 with 768 dimensions for policy retrieval.
+Google, Gateway and the prepared OpenAI Responses profile remain explicit choices;
+there is no automatic provider failover or model upgrade.
 
-Migration status (2026-10-06): local adapter, contracts and SQL rollback checks
-are complete; real model validation, embedding preparation and production cutover
-still require the project's OpenAI key and agreed test budget. The shared
-[migration plan](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/GPT6_MIGRATION_PLAN.md)
-and [progress record](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/FEATURE06_PROGRESS.md)
-distinguish local evidence from the active production version.
-
-Put the live configuration in
-`D:\working\code\21-the-wild-oasis-website-ai\.env.development.local` (never
-commit this file):
+Put the configuration in the ignored server file
+`D:\working\code\21-the-wild-oasis-website-ai\.env.development.local`:
 
 ```dotenv
-AI_PROVIDER=openai
-OPENAI_API_KEY=replace-with-your-server-key
-AI_CONCIERGE_MODEL=gpt-6-luna
-AI_OPERATIONS_MODEL=gpt-6-luna
-AI_BOOKING_INSIGHT_MODEL=gpt-6-luna
-AI_CONCIERGE_REASONING_EFFORT=low
-AI_OPERATIONS_REASONING_EFFORT=low
-AI_BOOKING_INSIGHT_REASONING_EFFORT=low
+AI_PROVIDER=dashscope
+DASHSCOPE_API_KEY=replace-with-your-server-key
+DASHSCOPE_BASE_URL=https://ws-yndfm25xs823xj89.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+AI_CONCIERGE_MODEL=qwen3.7-plus
+AI_OPERATIONS_MODEL=qwen3.7-plus
+AI_BOOKING_INSIGHT_MODEL=qwen3.7-plus
+AI_POLICY_PROVIDER=dashscope
 ```
 
-The OpenAI generation branch accepts only `gpt-6-luna`. Account access, API
-billing and limits must be verified before production cutover. Existing Gemini
-usage reports and dated evaluations retain their original model identities.
+Remove or replace stale GPT/Gemini model overrides when selecting DashScope.
+The key is never required in Staff or in any browser variable. Both frontends
+use the existing Guest/BFF server routes.
+
+Connection verification:
+
+```sh
+npm run ai:check-dashscope -- --dry-run
+npm run ai:check-dashscope -- --live --max-cny 1
+npm run policies:prepare-dashscope -- --dry-run
+```
+
+Only the explicit live command calls paid APIs. It checks complete streaming,
+function-call result replay, preference recap, strict Briefing JSON and 768-vector
+output using synthetic inputs and a read-only fixture tool. It has no database
+writes and prints only safe status and usage. Its preflight token/byte allowances
+use Beijing list prices; the provider invoice remains authoritative. These checks
+do not establish real hotel inventory, production RLS, network or browser quality.
+
+Policy preparation requires a separate explicit budget:
+`npm run policies:prepare-dashscope -- --prepare --max-cny 1`.
+It creates an ignored artifact without writing to the database. Verify its target
+project, apply the model-isolating SQL migration, calibrate retrieval, then atomically
+activate the complete corpus before production cutover. Vectors from a different
+model must be rebuilt even when their dimensions match. The DashScope profile uses measured 0.45/0.20 retrieval thresholds and fixed
+privacy-safe policy facets. Its 24-case real embedding/Postgres calibration is
+recorded in `tests/ai/dashscope-retrieval-calibration.json`.
+
+Migration status and deployment evidence are maintained in the shared
+[progress record](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/FEATURE06_PROGRESS.md).
+The prepared OpenAI profile requires its own key and `AI_POLICY_PROVIDER=openai`.
+
 
 Do not prefix the key with `NEXT_PUBLIC_`: only the server route may read it.
 Builds and automated tests need no live key. A live request with missing or
@@ -270,19 +289,19 @@ never run in browser code.
 
 ```bash
 npm run policies:check
-npm run policies:prepare-openai -- --dry-run
+npm run policies:prepare-dashscope -- --dry-run
 npm run policies:ingest -- --dry-run
 npm run policies:ingest -- --apply
 npm run policies:verify-access
 ```
 
-OpenAI migration preparation is separate from database activation:
-`npm run policies:prepare-openai -- --prepare --max-usd <agreed-budget>` generates
-the 7-document/16-chunk corpus into the ignored `output/openai-policy-migration`
+DashScope migration preparation is separate from database activation:
+`npm run policies:prepare-dashscope -- --prepare --max-cny <agreed-budget>` generates
+the 7-document/16-chunk corpus into the ignored `output/dashscope-policy-migration`
 directory, with usage and a payload hash, and performs zero database writes.
 Apply the versioned `openai_policy_embedding_identity` migration before using
 the model-scoped RPC. Validate the real retrieval thresholds before publishing;
-the old synthetic ranking report is not an OpenAI embedding calibration.
+the old synthetic ranking report is not a real embedding calibration.
 Activate the full prepared corpus with `sync_policy_documents_batch` in one
 transaction, against the verified production project. Do not use development
 `.env` database settings as the production target. `match_policy_chunks_for_model`

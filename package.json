@@ -23,10 +23,12 @@
     "seed:demo": "node scripts/generate-demo-data.mjs",
     "policies:check": "node scripts/check-policies.mjs",
     "policies:ingest": "node scripts/ingest-policies.mjs",
+    "policies:prepare-openai": "node scripts/prepare-openai-policy-migration.mjs",
     "policies:verify-access": "node scripts/verify-policy-access.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "4.0.42",
+    "@ai-sdk/openai": "4.0.46",
     "@ai-sdk/react": "4.0.61",
     "@heroicons/react": "^2.2.0",
     "@supabase/supabase-js": "^2.57.4",

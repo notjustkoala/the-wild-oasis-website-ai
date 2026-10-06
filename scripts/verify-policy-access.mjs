@@ -1,6 +1,7 @@
 import process from "node:process";
 
 import { createClient } from "@supabase/supabase-js";
+import { loadPolicyConfig } from "./policy-content.mjs";
 
 const STAFF_DOCUMENT_ID = "exception-handling-sop";
 const EMBEDDING_DIMENSIONS = 768;
@@ -51,6 +52,7 @@ function assertNoError(error) {
 }
 
 export async function verifyPolicyAccess({ guestClient, serviceClient }) {
+  const config = await loadPolicyConfig();
   const { data: serviceDocuments, error: serviceDocumentError } =
     await serviceClient
       .from("policy_documents")
@@ -102,10 +104,12 @@ export async function verifyPolicyAccess({ guestClient, serviceClient }) {
     (_, index) => (index === 0 ? 1 : 0)
   );
   const { data: guestMatches, error: guestRpcError } = await guestClient.rpc(
-    "match_policy_chunks",
+    "match_policy_chunks_for_model",
     {
       query_text: "exception handling SOP",
       query_embedding: queryEmbedding,
+      requested_embedding_model: config.embedding.model,
+      requested_document_instruction_version: config.embedding.documentInstructionVersion,
       result_count: 6,
       minimum_similarity: 0,
     }

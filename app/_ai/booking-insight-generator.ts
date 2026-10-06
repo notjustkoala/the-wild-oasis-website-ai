@@ -9,13 +9,14 @@ import {
 } from "ai";
 
 import { resolveBookingInsightModel, resolveBookingInsightModelIdentity } from "@/app/_ai/providers/booking-insight-model";
+import { generationOptions, generationConfigVersion } from "@/app/_ai/providers/generation-options";
 import { createRunObserver, type RunObserver } from "@/app/_ai/observability/run";
 import {
   bookingInsightSchema,
   type BookingInsight,
 } from "@/app/_ai/schemas/booking-insight";
 
-export const BOOKING_INSIGHT_PROMPT_VERSION = "booking-risk-v1";
+export const BOOKING_INSIGHT_PROMPT_VERSION = "booking-risk-v2-openai-low-standard";
 export const BOOKING_INSIGHT_TIMEOUT_MS = 25_000;
 
 export type BookingInsightFailureCode =
@@ -53,7 +54,8 @@ export async function generateBookingInsight(
 ): Promise<BookingInsight> {
   let modelName = "unconfigured";
   try { modelName = resolveBookingInsightModelIdentity(dependencies.env).modelId; } catch { /* no configuration values in telemetry */ }
-  const observer = dependencies.observer ?? createRunObserver({ surface: "booking-insight", model: modelName, promptVersion: BOOKING_INSIGHT_PROMPT_VERSION, traceId: dependencies.traceId });
+  const settings = generationOptions("booking-insight", dependencies.env);
+  const observer = dependencies.observer ?? createRunObserver({ surface: "booking-insight", model: modelName, promptVersion: generationConfigVersion("booking-insight", BOOKING_INSIGHT_PROMPT_VERSION, dependencies.env), traceId: dependencies.traceId, provider: dependencies.env?.AI_PROVIDER ?? process.env.AI_PROVIDER, reasoningEffort: settings.providerOptions?.openai.reasoningEffort, serviceTier: settings.providerOptions?.openai.serviceTier });
   const controller = new AbortController();
   const detach = observer.watch(dependencies.signal);
   const cancel = () => controller.abort();
@@ -81,6 +83,7 @@ export async function generateBookingInsight(
       )}`,
       abortSignal: controller.signal,
       onStepEnd: observer.step,
+      ...generationOptions("booking-insight", dependencies.env),
     });
 
     const parsed = bookingInsightSchema.parse(result.output);

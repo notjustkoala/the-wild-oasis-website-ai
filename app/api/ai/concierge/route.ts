@@ -15,6 +15,7 @@ import {
 import { getConciergeProviderConfigurationError } from "@/app/_ai/providers/concierge-model";
 import { ConciergeDailyQuotaError } from "@/app/_ai/providers/concierge-quota";
 import { CONCIERGE_DAILY_QUOTA_MESSAGE } from "@/app/_ai/concierge-error-messages";
+import { OpenAIAccountQuotaError } from "@/app/_ai/providers/openai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 100;
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
       headers: Object.fromEntries(headers), // Includes Cache-Control: no-store.
     });
   } catch (error) {
+    if (error instanceof OpenAIAccountQuotaError) return fail(error.message, 429, "provider-unavailable");
     if (error instanceof ConciergeDailyQuotaError) return fail(CONCIERGE_DAILY_QUOTA_MESSAGE, 429, "provider-unavailable");
     const timeout = error instanceof Error && /timeout|abort/i.test(error.name);
     return fail("The concierge is temporarily unavailable. Please browse cabins or try again.", timeout ? 504 : 503, request.signal?.aborted ? "cancelled" : timeout ? "timeout" : "provider-unavailable", request.signal?.aborted ? "cancelled" : timeout ? "timeout" : "failed");

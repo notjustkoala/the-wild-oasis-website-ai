@@ -19,8 +19,8 @@ export function hashPolicyValue(value) {
 
 export async function loadPolicyConfig(root = PROJECT_ROOT) {
   const config = JSON.parse(await readFile(join(root, "policy-rag.config.json"), "utf8"));
-  if (config?.embedding?.model !== "gemini-embedding-2" || config?.embedding?.dimensions !== 768) {
-    throw new Error("Policy embedding configuration must use gemini-embedding-2 with 768 dimensions.");
+  if (config?.embedding?.model !== "text-embedding-3-small" || config?.embedding?.dimensions !== 768) {
+    throw new Error("Policy embedding configuration must use text-embedding-3-small with 768 dimensions.");
   }
   const { maxCharacters, overlapCharacters } = config.chunking ?? {};
   if (!Number.isInteger(maxCharacters) || maxCharacters < 300 || maxCharacters > 2_000) {

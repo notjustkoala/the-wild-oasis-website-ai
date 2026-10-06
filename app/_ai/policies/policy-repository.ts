@@ -18,10 +18,12 @@ export type PolicyMatch = {
 
 export type PolicyRpcClient = {
   rpc: (
-    functionName: "match_policy_chunks",
+    functionName: "match_policy_chunks_for_model",
     parameters: {
       query_text: string;
       query_embedding: number[];
+      requested_embedding_model: string;
+      requested_document_instruction_version: string;
       result_count: number;
       minimum_similarity: number;
     }
@@ -75,12 +77,14 @@ export async function matchPolicyChunks({
     if (!client || typeof client.rpc !== "function") {
       throw new Error(POLICY_REPOSITORY_ERROR);
     }
-    const { data, error } = await client.rpc("match_policy_chunks", {
+    const { data, error } = await client.rpc("match_policy_chunks_for_model", {
       query_text: queryText.slice(
         0,
         policyConfig.retrieval.maximumQuestionCharacters
       ),
       query_embedding: embedding,
+      requested_embedding_model: policyConfig.embedding.model,
+      requested_document_instruction_version: policyConfig.embedding.documentInstructionVersion,
       result_count: Math.min(policyConfig.retrieval.matchCount + 1, 6),
       minimum_similarity:
         policyConfig.retrieval.minimumSemanticSimilarity,

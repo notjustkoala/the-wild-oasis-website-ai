@@ -1,6 +1,7 @@
 import process from "node:process";
 
 import { createGoogle } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
 import { createClient } from "@supabase/supabase-js";
 import { embedMany } from "ai";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
@@ -56,9 +57,9 @@ export function resolvePolicyIngestionEnvironment(env, apply) {
     throw new Error(`A public or anonymous Supabase key cannot be used for ${apply ? "--apply" : "--dry-run"}.`);
   }
   if (!apply) return { url, key: secretKey, googleKey: null };
-  const googleKey = env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
-  if (!googleKey) throw new Error("GOOGLE_GENERATIVE_AI_API_KEY is required for --apply.");
-  return { url, key: secretKey, googleKey };
+  const openaiKey = env.OPENAI_API_KEY?.trim();
+  if (!openaiKey) throw new Error("OPENAI_API_KEY is required for --apply.");
+  return { url, key: secretKey, openaiKey };
 }
 
 function parseStoredEmbedding(value) {
@@ -106,7 +107,11 @@ export function createPolicyIngestionPlan(localDocuments, remote, config) {
     if (remote.documents.some((row) => row.document_id === document.id && Number(row.version) > document.version)) {
       throw new Error(`Policy ${document.id} cannot reactivate an older version.`);
     }
-    const unchanged = Number(existing?.version) === document.version && existing?.content_hash === document.contentHash;
+    const existingChunks = remote.chunks.filter(row => row.document_id === document.id && Number(row.document_version) === document.version);
+    const unchanged = Number(existing?.version) === document.version && existing?.content_hash === document.contentHash
+      && existing?.embedding_model === config.embedding.model && Number(existing?.embedding_dimensions) === config.embedding.dimensions
+      && existingChunks.length === document.chunks.length
+      && existingChunks.every(row => row.embedding_instruction_version === config.embedding.documentInstructionVersion);
     const chunks = document.chunks.map((chunk) => {
       const reuseSourceChunkId = reusable.get(`${chunk.contentHash}|${config.embedding.model}|${config.embedding.dimensions}|${config.embedding.documentInstructionVersion}`);
       return { ...chunk, reuseSourceChunkId, action: reuseSourceChunkId ? "reuse" : "embed" };
@@ -175,26 +180,30 @@ export async function generatePolicyEmbeddings(plan, config, apiKey, dependencie
     .flatMap((document) => document.chunks.filter((chunk) => chunk.action === "embed").map((chunk) => ({ document, chunk })));
   if (!pending.length) return;
   try {
-    const google = (dependencies.createGoogleProvider ?? createGoogle)({ apiKey, fetch: dependencies.fetch ?? proxyAwareFetch(dependencies.env ?? process.env) });
+    const isOpenAI = config.embedding.model === "text-embedding-3-small";
+    const provider = (isOpenAI ? dependencies.createOpenAIProvider ?? createOpenAI : dependencies.createGoogleProvider ?? createGoogle)({ apiKey, fetch: dependencies.fetch ?? proxyAwareFetch(dependencies.env ?? process.env) });
     const result = await (dependencies.embedValues ?? embedMany)({
-      model: google.embedding(config.embedding.model),
+      model: provider.embedding(config.embedding.model),
       values: pending.map(({ document, chunk }) => `${document.title}\n${chunk.section}\n${chunk.content}`),
       maxParallelCalls: 2,
-      providerOptions: { google: { outputDimensionality: config.embedding.dimensions, taskType: "RETRIEVAL_DOCUMENT" } },
+      maxRetries: 0,
+      providerOptions: isOpenAI ? { openai: { dimensions: config.embedding.dimensions } } : { google: { outputDimensionality: config.embedding.dimensions, taskType: "RETRIEVAL_DOCUMENT" } },
     });
     if (result.embeddings.length !== pending.length || result.embeddings.some((embedding) => embedding.length !== config.embedding.dimensions || embedding.some((item) => !Number.isFinite(item)))) {
       throw new Error("invalid embedding response");
     }
     pending.forEach(({ chunk }, index) => { chunk.embedding = result.embeddings[index]; });
+    return { inputTokens: result.usage?.tokens ?? null };
   } catch {
     throw new Error("Policy embeddings could not be generated.");
   }
 }
 
-export async function applyPolicyIngestionPlan(client, plan, config) {
+export function policyIngestionPayloads(plan, config) {
+  const payloads = [];
   for (const document of plan.documents.filter((item) => item.action !== "unchanged")) {
     if (document.chunks.some((chunk) => !Array.isArray(chunk.embedding))) throw new Error("Policy synchronization could not be prepared.");
-    const { error } = await client.rpc("sync_policy_document", {
+    payloads.push({
       document_payload: {
         document_id: document.id,
         version: document.version,
@@ -217,12 +226,18 @@ export async function applyPolicyIngestionPlan(client, plan, config) {
         embedding_instruction_version: config.embedding.documentInstructionVersion,
       })),
     });
-    if (error) throw new Error("Policy database synchronization failed.");
   }
   for (const documentId of plan.deactivate) {
-    const { error } = await client.rpc("sync_policy_document", { document_payload: { document_id: documentId, deactivate: true }, chunk_payloads: [] });
-    if (error) throw new Error("Policy database synchronization failed.");
+    payloads.push({ document_payload: { document_id: documentId, deactivate: true }, chunk_payloads: [] });
   }
+  return payloads;
+}
+
+export async function applyPolicyIngestionPlan(client, plan, config) {
+  const payloads = policyIngestionPayloads(plan, config);
+  if (!payloads.length) return;
+  const { error } = await client.rpc("sync_policy_documents_batch", { payloads });
+  if (error) throw new Error("Policy database synchronization failed.");
 }
 
 export async function runPolicyIngestion({
@@ -259,7 +274,7 @@ export async function runPolicyIngestion({
       throw new Error("Reusable policy embeddings could not be read.");
     }
     try {
-      await generateEmbeddings(plan, config, runtime.googleKey, { env });
+      await generateEmbeddings(plan, config, runtime.openaiKey, { env });
     } catch {
       throw new Error("Policy embeddings could not be generated.");
     }

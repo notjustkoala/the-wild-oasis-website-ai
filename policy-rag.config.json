@@ -1,9 +1,9 @@
 {
   "embedding": {
-    "model": "gemini-embedding-2",
+    "model": "text-embedding-3-small",
     "dimensions": 768,
-    "documentInstructionVersion": "policy-document-v1",
-    "queryInstructionVersion": "policy-query-v1"
+    "documentInstructionVersion": "openai-policy-document-v1",
+    "queryInstructionVersion": "openai-policy-query-v1"
   },
   "chunking": {
     "version": "heading-paragraph-v1",

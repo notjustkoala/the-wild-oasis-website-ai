@@ -16,6 +16,7 @@ import { loadPolicyDocuments, parsePolicyDocument } from "../../scripts/policy-c
 import { createPolicyIngestionPlan, readPolicyRemoteState, hydrateReusablePolicyEmbeddings,
   generatePolicyEmbeddings } from "../../scripts/ingest-policies.mjs";
 import { embedMany } from "ai";
+import policyConfig from "../../policy-rag.config.json";
 
 const roles = ["ordinary", "staff", "admin"] as const;
 const accounts = new Map<string, { id: string; client: SupabaseClient; token: string }>();
@@ -106,7 +107,7 @@ it("embeds only one changed public chunk and reuses the other real vector withou
   expect(plan.summary).toMatchObject({ update: 1, unchanged: 6, embed: 1, reuse: 1 });
   await hydrateReusablePolicyEmbeddings(service, plan, config);
   let embeddedValues = 0;
-  await generatePolicyEmbeddings(plan, config, process.env.GOOGLE_GENERATIVE_AI_API_KEY!, {
+  await generatePolicyEmbeddings(plan, config, process.env.OPENAI_API_KEY!, {
     embedValues: async (options: Parameters<typeof embedMany>[0]) => {
       embeddedValues += options.values.length;
       return embedMany(options);
@@ -124,8 +125,10 @@ it.each(roles)("verifies a signed-in %s identity through tables, RPC, and the BF
   const expectedStaff = role !== "ordinary";
   const documents = await account.client.from("policy_documents").select("document_id,scope,is_current");
   const chunks = await account.client.from("policy_chunks").select("chunk_id").eq("document_id", "exception-handling-sop");
-  const matches = await account.client.rpc("match_policy_chunks", {
+  const matches = await account.client.rpc("match_policy_chunks_for_model", {
     query_text: "exception handling SOP", query_embedding: knownVector,
+    requested_embedding_model: policyConfig.embedding.model,
+    requested_document_instruction_version: policyConfig.embedding.documentInstructionVersion,
     result_count: 6, minimum_similarity: 0,
   });
   expect(documents.error).toBeNull(); expect(chunks.error).toBeNull(); expect(matches.error).toBeNull();
@@ -200,7 +203,7 @@ it.each([
   const policyOnlyClient = {
     from: () => { throw new Error("Business tables are disabled in the live policy regression."); },
     rpc: ((name, parameters) => {
-      if (name !== "match_policy_chunks") throw new Error("Only read-only policy retrieval is allowed.");
+      if (name !== "match_policy_chunks_for_model") throw new Error("Only read-only policy retrieval is allowed.");
       return account.client.rpc(name, parameters);
     }) satisfies PolicyRpcClient["rpc"],
   };

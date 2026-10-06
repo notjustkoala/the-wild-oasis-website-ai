@@ -6,7 +6,7 @@ import { CONCIERGE_GENERATE_TIMEOUT, CONCIERGE_TIMEOUT, createConciergeAbortReco
 import { authorizeOperationsStaff } from "@/app/_ai/operations-auth";
 import { operationsCors } from "@/app/_ai/operations-cors";
 import { readOperationsRequest } from "@/app/_ai/operations-request";
-import { getConciergeProviderConfigurationError } from "@/app/_ai/providers/concierge-model";
+import { getOperationsProviderConfigurationError } from "@/app/_ai/providers/operations-model";
 import { FALLBACK_GENERATION_ERROR_DIAGNOSTIC, safeGenerationErrorDiagnostic } from "@/app/_ai/observability/error-diagnostic";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   const referenceDate = new Date();
   const parsed = await readOperationsRequest(request, referenceDate);
   if (!parsed.ok) return fail(parsed.message, parsed.status, "invalid-request", "denied");
-  if (getConciergeProviderConfigurationError()) {
+  if (getOperationsProviderConfigurationError()) {
     return fail("The operations copilot is not configured.", 503, "configuration");
   }
   const limited = await observation.limit(authorization.user.id);

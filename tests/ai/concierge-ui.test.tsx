@@ -14,7 +14,7 @@ import ConciergePanel, {
   type ConciergeChatAdapter,
 } from "@/app/_components/concierge/ConciergePanel";
 import { CONCIERGE_INPUT_NOTICE_PREFIX } from "@/app/_ai/tools/input-error";
-import { CONCIERGE_DAILY_QUOTA_MESSAGE, CONCIERGE_RATE_LIMIT_MESSAGE } from "@/app/_ai/concierge-error-messages";
+import { CONCIERGE_DAILY_QUOTA_MESSAGE, CONCIERGE_RATE_LIMIT_MESSAGE, CONCIERGE_ACCOUNT_QUOTA_MESSAGE } from "@/app/_ai/concierge-error-messages";
 
 const mocks = vi.hoisted(() => ({
   adoptDraft: vi.fn(),
@@ -116,6 +116,15 @@ async function interact(action: () => Promise<unknown>) {
 }
 
 describe("ConciergePanel production UI states", () => {
+  it("shows an OpenAI account allowance failure without a futile immediate retry", async () => {
+    const user = userEvent.setup();
+    const adapter = createAdapter({ status: "error", error: new Error(`${CONCIERGE_ACCOUNT_QUOTA_MESSAGE} Reference: 00000000-0000-4000-8000-000000000001`) });
+    render(<ConciergePanel chatAdapter={adapter} />);
+    await openPanel(user);
+    expect(screen.getByRole("alert")).toHaveTextContent(CONCIERGE_ACCOUNT_QUOTA_MESSAGE);
+    expect(screen.queryByRole("button", { name: "Retry last request" })).not.toBeInTheDocument();
+    expect(adapter.regenerate).not.toHaveBeenCalled();
+  });
   it.each(["sse", "http"])("explains the daily quota and preserves results without offering an immediate retry (%s)", async transport => {
     const user = userEvent.setup();
     const traceId = "00000000-0000-4000-8000-000000000001";

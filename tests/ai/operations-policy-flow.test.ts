@@ -74,7 +74,7 @@ it.each(cases)("retrieves SOP evidence once and prevents writes for explanation-
   expect(embed).toHaveBeenCalledWith(query);
   expect(rpc).toHaveBeenCalledTimes(expectedRetrievals);
   if (expectedRetrievals === 2) expect(embed).toHaveBeenCalledWith(STAFF_WAIVER_QUERY);
-  expect(rpc).toHaveBeenCalledWith("match_policy_chunks", expect.objectContaining({ query_text: query }));
+  expect(rpc).toHaveBeenCalledWith("match_policy_chunks_for_model", expect.objectContaining({ query_text: query }));
   expect(from).not.toHaveBeenCalled();
   expect(result.steps.flatMap(step => step.toolCalls).filter(call => call.toolName === "searchHotelPolicies")).toHaveLength(1);
   expect(result.steps.flatMap(step => step.toolResults)[0].output).toMatchObject({

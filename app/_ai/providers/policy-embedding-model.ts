@@ -1,18 +1,18 @@
 import "server-only";
 
-import { createGoogle } from "@ai-sdk/google";
+import { createOpenAI } from "@ai-sdk/openai";
 import { embed } from "ai";
 
 import policyConfig from "@/policy-rag.config.json";
 import { createProxyAwareFetch } from "@/app/_lib/server-fetch";
 
-export const POLICY_EMBEDDING_MODEL = "gemini-embedding-2" as const;
+export const POLICY_EMBEDDING_MODEL = "text-embedding-3-small" as const;
 export const POLICY_EMBEDDING_DIMENSIONS = 768 as const;
 
 export type PolicyQueryEmbeddingDependencies = {
   env?: NodeJS.ProcessEnv;
   fetch?: typeof globalThis.fetch;
-  createGoogleProvider?: typeof createGoogle;
+  createOpenAIProvider?: typeof createOpenAI;
   embedValue?: typeof embed;
 };
 
@@ -32,20 +32,19 @@ export async function embedPolicyQuery(
 ) {
   const embeddingConfig = assertPolicyEmbeddingConfiguration();
   const env = dependencies.env ?? process.env;
-  const apiKey = env.GOOGLE_GENERATIVE_AI_API_KEY?.trim();
+  const apiKey = env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("Policy search is temporarily unavailable.");
 
-  const google = (dependencies.createGoogleProvider ?? createGoogle)({
+  const openai = (dependencies.createOpenAIProvider ?? createOpenAI)({
     apiKey,
     fetch: dependencies.fetch ?? createProxyAwareFetch(env),
   });
   const result = await (dependencies.embedValue ?? embed)({
-    model: google.embedding(embeddingConfig.model),
+    model: openai.embedding(embeddingConfig.model),
     value: query,
     providerOptions: {
-      google: {
-        outputDimensionality: embeddingConfig.dimensions,
-        taskType: "RETRIEVAL_QUERY",
+      openai: {
+        dimensions: embeddingConfig.dimensions,
       },
     },
   });

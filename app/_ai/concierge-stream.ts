@@ -3,6 +3,7 @@ import { safeGenerationErrorDiagnostic } from "@/app/_ai/observability/error-dia
 import { ConciergeInputError, CONCIERGE_INPUT_NOTICE_PREFIX } from "@/app/_ai/tools/input-error";
 import { ConciergeDailyQuotaError } from "@/app/_ai/providers/concierge-quota";
 import { CONCIERGE_DAILY_QUOTA_MESSAGE, CONCIERGE_RATE_LIMIT_MESSAGE } from "@/app/_ai/concierge-error-messages";
+import { OpenAIAccountQuotaError } from "@/app/_ai/providers/openai-model";
 
 export const CONCIERGE_TIMEOUT = {
   totalMs: 90_000,
@@ -31,6 +32,7 @@ export function conciergeStreamErrorMessage(error: unknown, traceId: string): st
     return `${CONCIERGE_INPUT_NOTICE_PREFIX}${error.message}`;
   }
   if (error instanceof ConciergeDailyQuotaError) return `${CONCIERGE_DAILY_QUOTA_MESSAGE} Reference: ${traceId}`;
+  if (error instanceof OpenAIAccountQuotaError) return `${error.message} Reference: ${traceId}`;
   const diagnostic = safeGenerationErrorDiagnostic(error);
   const message = diagnostic.code === "provider-rate-limit"
     ? CONCIERGE_RATE_LIMIT_MESSAGE

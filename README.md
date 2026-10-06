@@ -83,9 +83,10 @@ Required variables are documented in `.env.example`:
 - `SUPABASE_SECRET_KEY` (server runtime only)
 - `NEXTAUTH_SECRET`
 - `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`
-- `AI_PROVIDER=google` and `GOOGLE_GENERATIVE_AI_API_KEY` for live AI concierge
+- `AI_PROVIDER=openai` and `OPENAI_API_KEY` for live AI generation and embeddings
   requests (server runtime only)
-- optional `AI_CONCIERGE_MODEL`; it defaults to `gemini-3.6-flash`
+- `AI_CONCIERGE_MODEL`, `AI_OPERATIONS_MODEL`, `AI_BOOKING_INSIGHT_MODEL`: `gpt-6-luna`
+- per-workflow `AI_*_REASONING_EFFORT=low`; Responses uses Standard processing and `store: false`
 
 `SUPABASE_KEY` is a compatibility fallback for a legacy low-privilege anon
 key. `SUPABASE_SERVICE_ROLE_KEY` is accepted only as a legacy server-only
@@ -96,32 +97,37 @@ committed. Local environment files are ignored by Git.
 ## AI concierge
 
 The global **Ask AI concierge** launcher streams an AI SDK `ToolLoopAgent`.
-It calls the Gemini Developer API directly by default, using the stable
-`gemini-3.6-flash` model because it supports streaming and function calling and
-is available to the development account used for this project. This does not
-guarantee that 3.6 Flash has free quota for every account. Model availability,
-free-tier quotas, regional availability, and verification requirements can
-change; check the model list and limits shown by Google AI Studio for the
-current account before relying on them.
-On the Free Tier, Google currently states that submitted content may be used to
-improve its products. Do not send secrets or sensitive personal data.
+The migration target is OpenAI Responses with `gpt-6-luna` for all three
+generation workflows and `text-embedding-3-small` with 768 dimensions for policy
+retrieval. Google/Gateway generation branches remain available for explicit
+legacy configuration. Configure `AI_PROVIDER=openai` to select the new provider;
+there is no automatic model upgrade or provider failover.
+
+Migration status (2026-10-06): local adapter, contracts and SQL rollback checks
+are complete; real model validation, embedding preparation and production cutover
+still require the project's OpenAI key and agreed test budget. The shared
+[migration plan](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/GPT6_MIGRATION_PLAN.md)
+and [progress record](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/FEATURE06_PROGRESS.md)
+distinguish local evidence from the active production version.
 
 Put the live configuration in
 `D:\working\code\21-the-wild-oasis-website-ai\.env.development.local` (never
 commit this file):
 
 ```dotenv
-AI_PROVIDER=google
-GOOGLE_GENERATIVE_AI_API_KEY=replace-with-your-key
-# Optional; this is already the default:
-# AI_CONCIERGE_MODEL=gemini-3.6-flash
+AI_PROVIDER=openai
+OPENAI_API_KEY=replace-with-your-server-key
+AI_CONCIERGE_MODEL=gpt-6-luna
+AI_OPERATIONS_MODEL=gpt-6-luna
+AI_BOOKING_INSIGHT_MODEL=gpt-6-luna
+AI_CONCIERGE_REASONING_EFFORT=low
+AI_OPERATIONS_REASONING_EFFORT=low
+AI_BOOKING_INSIGHT_REASONING_EFFORT=low
 ```
 
-If the current account has no free quota for 3.6 Flash, explicitly select a
-model that AI Studio shows as available under that account's Free Tier, for
-example `AI_CONCIERGE_MODEL=gemini-3.5-flash-lite` (lower-cost/high-throughput)
-or `AI_CONCIERGE_MODEL=gemini-3.5-flash`. Always follow the current AI Studio
-model list and quota display rather than assuming a model is universally free.
+The OpenAI generation branch accepts only `gpt-6-luna`. Account access, API
+billing and limits must be verified before production cutover. Existing Gemini
+usage reports and dated evaluations retain their original model identities.
 
 Do not prefix the key with `NEXT_PUBLIC_`: only the server route may read it.
 Builds and automated tests need no live key. A live request with missing or
@@ -204,16 +210,17 @@ and long identifiers. If the remaining text still resembles an unlabelled full
 name or contains a sensitive field that cannot be isolated safely, generation
 fails closed and the admin UI directs the employee to manual handling. Booking
 IDs, guest records, national IDs, and database rows are never added to the
-Gemini request. On Google's Free Tier, even safely redacted text may be used for
-product improvement under Google's current terms. Automated tests use
-`MockLanguageModelV4` and never call Gemini or Supabase.
+model request. OpenAI Responses uses `store: false`; this is not a claim of
+account-level Zero Data Retention. Automated tests intercept provider HTTP or
+use `MockLanguageModelV4` and do not call live models or Supabase.
 
 Every GET compares the saved observation hash, model, and prompt version with
 the current values. A mismatch is shown as **stale** and the previous result is
 not rendered as the current Briefing.
 
 `AI_BOOKING_INSIGHT_MODEL` can override the concierge model independently.
-The default uses the same configured Gemini model and server-only credential.
+With the OpenAI profile, it uses `gpt-6-luna` and the server-only OpenAI key.
+Reasoning effort changes also invalidate the cached Briefing identity.
 The migration in `supabase/migrations` must be applied only to the dedicated
 development project before using the admin Briefing UI. The original
 `booking_ai_insights` migration is immutable after application; apply the later
@@ -263,10 +270,23 @@ never run in browser code.
 
 ```bash
 npm run policies:check
+npm run policies:prepare-openai -- --dry-run
 npm run policies:ingest -- --dry-run
 npm run policies:ingest -- --apply
 npm run policies:verify-access
 ```
+
+OpenAI migration preparation is separate from database activation:
+`npm run policies:prepare-openai -- --prepare --max-usd <agreed-budget>` generates
+the 7-document/16-chunk corpus into the ignored `output/openai-policy-migration`
+directory, with usage and a payload hash, and performs zero database writes.
+Apply the versioned `openai_policy_embedding_identity` migration before using
+the model-scoped RPC. Validate the real retrieval thresholds before publishing;
+the old synthetic ranking report is not an OpenAI embedding calibration.
+Activate the full prepared corpus with `sync_policy_documents_batch` in one
+transaction, against the verified production project. Do not use development
+`.env` database settings as the production target. `match_policy_chunks_for_model`
+filters embedding model and instruction identity while preserving public/staff RLS.
 
 The access check first confirms that the staff document and its chunks exist with
 the server-only identity. It then repeats table reads and the policy-search RPC

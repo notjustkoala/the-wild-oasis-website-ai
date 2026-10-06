@@ -3,6 +3,7 @@ import "server-only";
 import { BOOKING_INSIGHT_PROMPT_VERSION } from "@/app/_ai/booking-insight-generator";
 import { createBookingInsightSourceHash } from "@/app/_ai/booking-insight-privacy";
 import { resolveBookingInsightModelIdentity } from "@/app/_ai/providers/booking-insight-model";
+import { generationConfigVersion } from "@/app/_ai/providers/generation-options";
 
 export type BookingInsightIdentity = {
   model: string;
@@ -15,6 +16,7 @@ export function createCurrentBookingInsightIdentity(
   env: NodeJS.ProcessEnv = process.env,
   promptVersion = BOOKING_INSIGHT_PROMPT_VERSION
 ): BookingInsightIdentity {
+  promptVersion = generationConfigVersion("booking-insight", promptVersion, env);
   let model = "unconfigured";
   try {
     model = resolveBookingInsightModelIdentity(env).modelId;

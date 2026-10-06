@@ -19,20 +19,20 @@ const publicMatch = {
 };
 
 describe("policy search", () => {
-  it("uses the fixed Gemini query model, dimensions, and RETRIEVAL_QUERY task", async () => {
+  it("uses the fixed OpenAI query model and dimensions without Google credentials", async () => {
     const embedding = vi.fn((_modelId: string) => "embedding-model");
-    const createGoogleProvider = vi.fn((_options: unknown) => ({ embedding }));
+    const createOpenAIProvider = vi.fn((_options: unknown) => ({ embedding }));
     const embedValue = vi.fn(async (_options: unknown) => ({ embedding: vector }));
     await expect(embedPolicyQuery("pet policy", {
-      env: { NODE_ENV: "test", GOOGLE_GENERATIVE_AI_API_KEY: "google-secret" },
+      env: { NODE_ENV: "test", OPENAI_API_KEY: "openai-test-secret" },
       fetch: vi.fn() as never,
-      createGoogleProvider: createGoogleProvider as never,
+      createOpenAIProvider: createOpenAIProvider as never,
       embedValue: embedValue as never,
     })).resolves.toEqual(vector);
-    expect(embedding).toHaveBeenCalledWith("gemini-embedding-2");
+    expect(embedding).toHaveBeenCalledWith("text-embedding-3-small");
     expect(embedValue).toHaveBeenCalledWith(expect.objectContaining({
       value: "pet policy",
-      providerOptions: { google: { outputDimensionality: 768, taskType: "RETRIEVAL_QUERY" } },
+      providerOptions: { openai: { dimensions: 768 } },
     }));
   });
 
@@ -266,7 +266,9 @@ describe("policy search", () => {
   it("calls only the fixed RPC with bounded parameters and parses citations", async () => {
     const rpc = vi.fn(async (_name: string, _parameters: Record<string, unknown>): Promise<{ data: unknown; error: unknown }> => ({ data: [{ chunk_id: "chunk", document_id: "pet-policy", title: "Pet policy", section: "Limits", version: 1, effective_date: "2026-08-30", content: "x".repeat(500), scope: "public", semantic_similarity: 0.8, rrf_score: 0.03 }], error: null }));
     const rows = await matchPolicyChunks({ client: { rpc }, queryText: "pet policy", embedding: vector });
-    expect(Object.keys(rpc.mock.calls[0][1]).sort()).toEqual(["minimum_similarity", "query_embedding", "query_text", "result_count"]);
+    expect(Object.keys(rpc.mock.calls[0][1]).sort()).toEqual(["minimum_similarity", "query_embedding", "query_text", "requested_document_instruction_version", "requested_embedding_model", "result_count"]);
+    expect(rpc.mock.calls[0][0]).toBe("match_policy_chunks_for_model");
+    expect(rpc.mock.calls[0][1].requested_embedding_model).toBe("text-embedding-3-small");
     expect(rpc.mock.calls[0][1]).not.toHaveProperty("scope");
     expect(rows[0].citation.excerpt.length).toBeLessThanOrEqual(420);
     rpc.mockResolvedValueOnce({ data: null, error: { message: "private SQL detail" } });

@@ -26,16 +26,16 @@ it.each(["王小明", "李明", "欧阳晓月"])("removes %s before both generat
   expect(parsed.currentPolicyQuestion).toBe(safeQuestion);
   expect(JSON.stringify(parsed.uiMessages)).not.toContain(name);
 
-  // Run the real embedding adapter and Google SDK serializer. Only the HTTP
+  // Run the real embedding adapter and OpenAI SDK serializer. Only the HTTP
   // transport is intercepted, so no name, request or key leaves this test.
   const requestBodies: unknown[] = [];
   const embeddingFetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
     requestBodies.push(JSON.parse(String(init?.body)));
-    return Response.json({ embedding: { values: Array(768).fill(0.01) } });
+    return Response.json({ object: "list", model: "text-embedding-3-small", data: [{ object: "embedding", index: 0, embedding: Array(768).fill(0.01) }], usage: { prompt_tokens: 10, total_tokens: 10 } });
   });
   const originalEmbed = embeddings.embedPolicyQuery;
   vi.spyOn(embeddings, "embedPolicyQuery").mockImplementation(query => originalEmbed(query, {
-    env: { NODE_ENV: "test", GOOGLE_GENERATIVE_AI_API_KEY: "test-only-key" },
+    env: { NODE_ENV: "test", OPENAI_API_KEY: "test-only-key" },
     fetch: embeddingFetch as typeof fetch,
   }));
   const rpc = vi.fn().mockResolvedValue({ error: null, data: [{
@@ -60,13 +60,13 @@ it.each(["王小明", "李明", "欧阳晓月"])("removes %s before both generat
 
   expect(embeddingFetch).toHaveBeenCalledTimes(1);
   expect(requestBodies).toEqual([expect.objectContaining({
-    content: { parts: [{ text: safeQuestion }] },
-    outputDimensionality: 768, taskType: "RETRIEVAL_QUERY",
+    input: [safeQuestion],
+    model: "text-embedding-3-small", dimensions: 768,
   })]);
   expect(JSON.stringify(requestBodies)).not.toContain(name);
   expect(JSON.stringify(model.doGenerateCalls.map(call => call.prompt))).not.toContain(name);
   expect(rpc).toHaveBeenCalledTimes(1);
-  expect(rpc).toHaveBeenCalledWith("match_policy_chunks", expect.objectContaining({ query_text: safeQuestion }));
+  expect(rpc).toHaveBeenCalledWith("match_policy_chunks_for_model", expect.objectContaining({ query_text: safeQuestion }));
   expect(from).not.toHaveBeenCalled();
   expect(result.steps.flatMap(step => step.toolResults)[0].output).toMatchObject({ status: "grounded", citations: [expect.objectContaining({ documentId: "pet-policy" })] });
 });

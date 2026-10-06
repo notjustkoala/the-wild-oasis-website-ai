@@ -37,9 +37,10 @@ function document(overrides: Record<string, unknown> = {}) {
 describe("policy ingestion", () => {
   it("plans an idempotent repeat without embedding or synchronization", async () => {
     const local = document({ version: 1, contentHash: "same-document" });
+    const existingChunks = local.chunks.map(chunk => ({ chunk_id: chunk.chunkId, document_id: local.id, document_version: 1, content_hash: chunk.contentHash, embedding_instruction_version: "document-v1" }));
     const plan = createPolicyIngestionPlan([local], {
       documents: [{ document_id: "pet-policy", version: 1, content_hash: "same-document", is_current: true, embedding_model: "gemini-embedding-2", embedding_dimensions: 3 }],
-      chunks: [],
+      chunks: existingChunks,
     }, config);
     expect(plan.summary).toEqual({ insert: 0, update: 0, unchanged: 1, deactivate: 0, embed: 0, reuse: 0 });
 
@@ -47,10 +48,10 @@ describe("policy ingestion", () => {
     const applyPlan = vi.fn();
     await runPolicyIngestion({
       args: ["--apply"],
-      env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_test", GOOGLE_GENERATIVE_AI_API_KEY: "google-secret" },
+      env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_test", OPENAI_API_KEY: "openai-test-secret" },
       clientFactory: vi.fn(() => ({})),
       loadDocuments: vi.fn(async () => ({ config, documents: [local] })),
-      readRemoteState: vi.fn(async () => ({ documents: [{ document_id: "pet-policy", version: 1, content_hash: "same-document", is_current: true, embedding_model: "gemini-embedding-2", embedding_dimensions: 3 }], chunks: [] })),
+      readRemoteState: vi.fn(async () => ({ documents: [{ document_id: "pet-policy", version: 1, content_hash: "same-document", is_current: true, embedding_model: "gemini-embedding-2", embedding_dimensions: 3 }], chunks: existingChunks })),
       generateEmbeddings,
       applyPlan,
     } as never);
@@ -91,7 +92,7 @@ describe("policy ingestion", () => {
     const applyPlan = vi.fn();
     await expect(runPolicyIngestion({
       args: ["--apply"],
-      env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_test", GOOGLE_GENERATIVE_AI_API_KEY: "google-secret" },
+      env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_test", OPENAI_API_KEY: "openai-test-secret" },
       clientFactory: vi.fn(() => ({})),
       loadDocuments: vi.fn(async () => ({ config, documents: [document()] })),
       readRemoteState: vi.fn(async () => ({ documents: [], chunks: [] })),
@@ -102,7 +103,7 @@ describe("policy ingestion", () => {
     try {
       await runPolicyIngestion({
         args: ["--apply"],
-        env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_test", GOOGLE_GENERATIVE_AI_API_KEY: "google-secret" },
+        env: { SUPABASE_URL: "https://example.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_test", OPENAI_API_KEY: "openai-test-secret" },
         clientFactory: vi.fn(() => ({})),
         loadDocuments: vi.fn(async () => ({ config, documents: [document()] })),
         readRemoteState: vi.fn(async () => ({ documents: [], chunks: [] })),
@@ -161,14 +162,15 @@ describe("policy ingestion", () => {
     expect(() => resolvePolicyIngestionEnvironment({ SUPABASE_URL: "https://example.supabase.co", SUPABASE_SECRET_KEY: "sb_publishable_test" }, false)).toThrow(/public or anonymous.*dry-run/i);
   });
 
-  it("sends each document through one atomic RPC and deactivates removed policies", async () => {
+  it("synchronizes all documents and deactivations in one atomic batch", async () => {
     const plan = createPolicyIngestionPlan([document()], { documents: [{ document_id: "removed-policy", version: 1, content_hash: "old", is_current: true, embedding_model: "gemini-embedding-2", embedding_dimensions: 3 }], chunks: [] }, config);
     plan.documents[0].chunks.forEach((chunk: { embedding?: number[] }) => { chunk.embedding = [0.1, 0.2, 0.3]; });
     const rpc = vi.fn(async (_name: string, _payload: Record<string, unknown>) => ({ error: null }));
     await applyPolicyIngestionPlan({ rpc }, plan, config);
-    expect(rpc).toHaveBeenCalledTimes(2);
-    expect(rpc.mock.calls[0][0]).toBe("sync_policy_document");
-    expect(rpc.mock.calls[1][1].document_payload).toEqual({ document_id: "removed-policy", deactivate: true });
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(rpc.mock.calls[0][0]).toBe("sync_policy_documents_batch");
+    expect(rpc.mock.calls[0][1].payloads).toHaveLength(2);
+    expect((rpc.mock.calls[0][1].payloads as any[])[1].document_payload).toEqual({ document_id: "removed-policy", deactivate: true });
   });
 
   it("requires a version bump when current content changes", () => {

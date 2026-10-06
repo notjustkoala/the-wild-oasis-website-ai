@@ -6,7 +6,9 @@ import { createOperationsTools } from "@/app/_ai/operations-tools";
 import type { PolicyRpcClient } from "@/app/_ai/policies/policy-repository";
 import { isPolicyExplanationOnlyRequest } from "@/app/_ai/policies/policy-query-controls";
 import { parseOperationsDate, resolveRelativeOperationsDateRange, type RequestedInternalNoteDraft } from "@/app/_ai/operations-types";
-import { CONCIERGE_MODEL_MAX_RETRIES, resolveConciergeModel } from "@/app/_ai/providers/concierge-model";
+import { CONCIERGE_MODEL_MAX_RETRIES } from "@/app/_ai/providers/concierge-model";
+import { resolveOperationsModel } from "@/app/_ai/providers/operations-model";
+import { generationOptions } from "@/app/_ai/providers/generation-options";
 import policyConfig from "@/policy-rag.config.json";
 import { POLICY_ANSWER_INSTRUCTIONS } from "@/app/_ai/policies/policy-answer-instructions";
 import type { RunObserver } from "@/app/_ai/observability/run";
@@ -94,7 +96,7 @@ export function createOperationsAgent({
   return new ToolLoopAgent({
     id: "wild-oasis-operations-copilot",
     onStepEnd: observer?.step,
-    model: model ?? resolveConciergeModel(),
+    model: model ?? resolveOperationsModel(),
     instructions: createOperationsInstructions(referenceDate),
     tools,
     experimental_refineToolInput: enforcedPolicyQuestion
@@ -153,6 +155,7 @@ export function createOperationsAgent({
     maxRetries: CONCIERGE_MODEL_MAX_RETRIES,
     reasoning: "low",
     maxOutputTokens: 1_200,
+    ...generationOptions("operations"),
   });
 }
 

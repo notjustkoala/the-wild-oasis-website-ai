@@ -14,7 +14,7 @@ import {
 
 import type { ConciergeAgentUIMessage } from "@/app/_ai/agents/concierge-agent";
 import type { CabinRecommendation } from "@/app/_ai/schemas/concierge";
-import { conciergePublicErrorMessage, CONCIERGE_DAILY_QUOTA_MESSAGE } from "@/app/_ai/concierge-error-messages";
+import { conciergePublicErrorMessage, CONCIERGE_DAILY_QUOTA_MESSAGE, CONCIERGE_ACCOUNT_QUOTA_MESSAGE } from "@/app/_ai/concierge-error-messages";
 import { useReservation } from "@/app/_components/ReservationContext";
 import CabinComparison from "./CabinComparison";
 import CabinRecommendationCard from "./CabinRecommendationCard";
@@ -508,7 +508,7 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
                     {publicError ?? "The concierge could not finish that request. Please try again later or browse cabins without AI."}
                   </p>
                   <p className="mt-2">Received text and cards are kept and may be incomplete.</p>
-                  {publicError !== CONCIERGE_DAILY_QUOTA_MESSAGE ? <button
+                  {publicError !== CONCIERGE_DAILY_QUOTA_MESSAGE && publicError !== CONCIERGE_ACCOUNT_QUOTA_MESSAGE ? <button
                     type="button"
                     onClick={handleRetry}
                     className="mt-2 rounded bg-red-100 px-3 py-1.5 font-semibold text-red-950 focus:outline-none focus:ring-2 focus:ring-white"

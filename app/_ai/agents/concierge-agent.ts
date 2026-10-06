@@ -14,6 +14,7 @@ import policyConfig from "@/policy-rag.config.json";
 import { POLICY_ANSWER_INSTRUCTIONS } from "@/app/_ai/policies/policy-answer-instructions";
 import type { RunObserver } from "@/app/_ai/observability/run";
 import { withConciergeQuotaProtection } from "@/app/_ai/providers/concierge-quota";
+import { generationOptions } from "@/app/_ai/providers/generation-options";
 
 export const conciergeTools = {
   ...cabinTools,
@@ -95,6 +96,7 @@ export function createConciergeAgent({
     stopWhen: isStepCount(8),
     maxRetries: CONCIERGE_MODEL_MAX_RETRIES,
     maxOutputTokens: 2400,
+    ...generationOptions("concierge"),
   });
 }
 

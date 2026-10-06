@@ -111,7 +111,7 @@ function measure(corpus: CorpusItem[], ranking: HybridRankingConfig) {
 describe("policy retrieval evaluation", () => {
   it("locks the provisional chunk, embedding, threshold, candidate, and RRF parameters", () => {
     expect(config).toMatchObject({
-      embedding: { model: "gemini-embedding-2", dimensions: 768, documentInstructionVersion: "policy-document-v1", queryInstructionVersion: "policy-query-v1" },
+      embedding: { model: "text-embedding-3-small", dimensions: 768, documentInstructionVersion: "openai-policy-document-v1", queryInstructionVersion: "openai-policy-query-v1" },
       chunking: { version: "heading-paragraph-v1", maxCharacters: 900, overlapCharacters: 120 },
       retrieval: { matchCount: 5, candidateCount: 30, minimumSemanticSimilarity: 0.55, maximumSemanticDistanceFromBest: 0.04, rrfK: 50, fullTextWeight: 1, semanticWeight: 1 },
     });

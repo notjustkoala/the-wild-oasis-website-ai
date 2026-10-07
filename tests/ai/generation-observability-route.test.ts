@@ -61,6 +61,22 @@ describe("generation routes preserve trace and failure semantics", () => {
     expect(JSON.stringify(messages)).not.toContain("FORGED");
   });
 
+  it("streams ONLY the missing year question without calling the model or guessing from today's date", async () => {
+    const response = await concierge(new Request("http://localhost/api/ai/concierge", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "11-10到11-13，2位客人，预算1200美元，希望安静。请推荐小屋。" }] }] }),
+    }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-vercel-ai-ui-message-stream")).toBe("v1");
+    const text = await response.text();
+    expect(text).toContain("请补充入住年份");
+    expect(text).not.toMatch(/无法.*搜索|将年份确认为|请确认.*(?:人数|预算|晚)/);
+    expect(text).toContain('"finishReason":"stop"');
+    expect(mocks.stream).not.toHaveBeenCalled();
+    expect(mocks.agentOptions).toBeNull();
+    expect(mocks.persist).toHaveBeenCalledWith(expect.objectContaining({ status: "completed", input_tokens: 0, output_tokens: 0, tool_names: [] }));
+  });
+
   it("passes a completed multi-turn stay to the production agent without losing earlier fields", async () => {
     mocks.stream.mockResolvedValueOnce(new Response("fixture-stream"));
     const response = await concierge(new Request("http://localhost/api/ai/concierge", {

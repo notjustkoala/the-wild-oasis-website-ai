@@ -169,3 +169,12 @@ export function shouldSearchConciergeDemand(texts: string[], memory: ConciergeDe
     /^(?:改为|改成|人数|预算|希望|偏好|喜欢|(?:two|three|four|\d+) guests)/iu.test(current.trim())
   );
 }
+
+/** A known missing year is a form clarification, never a model guess from today's date. */
+export function conciergeYearClarification(memory: ConciergeDemandMemory | undefined, userText: string): string | undefined {
+  if (!memory?.missing.includes("year") || memory.conflicts.length) return undefined;
+  if (!SEARCH_INTENT.test(userText) && !isConciergeStayPlanning(userText) && !/确认|确定|\d{2,4}\s*年|^(?:yes|confirmed?|correct|ok)[.!\s]*$/iu.test(userText.trim())) return undefined;
+  return /\p{Script=Han}/u.test(userText)
+    ? "请补充入住年份（例如2026年）。您已提供的日期、人数、预算和偏好会保留，无需再次确认。"
+    : "Which year is your stay? I will keep the dates, guest count, budget and preferences you already provided.";
+}

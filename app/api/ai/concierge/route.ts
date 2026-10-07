@@ -1,4 +1,4 @@
-import { createAgentUIStreamResponse } from "ai";
+import { createAgentUIStreamResponse, createUIMessageStream, createUIMessageStreamResponse } from "ai";
 
 import { createConciergeAgent, CONCIERGE_INSTRUCTIONS } from "@/app/_ai/agents/concierge-agent";
 import { observedRoute } from "@/app/_ai/observability/route";
@@ -16,6 +16,7 @@ import { getConciergeProviderConfigurationError } from "@/app/_ai/providers/conc
 import { ConciergeDailyQuotaError } from "@/app/_ai/providers/concierge-quota";
 import { CONCIERGE_DAILY_QUOTA_MESSAGE } from "@/app/_ai/concierge-error-messages";
 import { OpenAIAccountQuotaError } from "@/app/_ai/providers/openai-model";
+import { conciergeYearClarification } from "@/app/_ai/concierge-memory";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 100;
@@ -43,6 +44,26 @@ export async function POST(request: Request) {
   run.watch(request.signal);
   try {
     const turn = prepareConciergeTurn(validated.uiMessages);
+    const userText = validated.uiMessages.at(-1)?.parts.filter(part => part.type === "text").map(part => part.text).join("\n") ?? "";
+    const clarification = !turn.preferenceRecallOnly && conciergeYearClarification(turn.demandMemory, userText);
+    if (clarification) {
+      // A deterministic missing-field question requires no model/inventory call.
+      const stream = createUIMessageStream({
+        execute: async ({ writer }) => {
+          if (request.signal.aborted) { writer.write({ type: "abort" }); await run.finish("cancelled", "cancelled"); return; }
+          writer.write({ type: "start" });
+          writer.write({ type: "text-start", id: "stay-year" });
+          run.firstText();
+          writer.write({ type: "text-delta", id: "stay-year", delta: clarification });
+          writer.write({ type: "text-end", id: "stay-year" });
+          run.step({ usage: { inputTokens: 0, outputTokens: 0, inputTokenDetails: { noCacheTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }, outputTokenDetails: { reasoningTokens: 0 } } });
+          await run.finish();
+          writer.write({ type: "finish", finishReason: "stop", messageMetadata: { finishReason: "stop" } });
+        },
+        onError: error => conciergeStreamErrorMessage(error, run.traceId),
+      });
+      return createUIMessageStreamResponse({ stream, headers: Object.fromEntries(headers) });
+    }
     const agent = createConciergeAgent({
       currentPolicyQuestion: turn.currentPolicyQuestion,
       preferenceRecallOnly: turn.preferenceRecallOnly,

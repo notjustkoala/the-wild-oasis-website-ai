@@ -2,7 +2,7 @@ import { createAgentUIStreamResponse } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import type { LanguageModelV4StreamPart } from "@ai-sdk/provider";
 
-import { collectConciergeDemand } from "@/app/_ai/concierge-memory";
+import { collectConciergeDemand, conciergeYearClarification } from "@/app/_ai/concierge-memory";
 import { prepareConciergeTurn, validateConciergeRequestBody } from "@/app/_ai/concierge-request";
 import { createConciergeAgent } from "@/app/_ai/agents/concierge-agent";
 import { createCabinTools, type ConciergeInventoryDataSource } from "@/app/_ai/tools/cabin-tools";
@@ -28,6 +28,9 @@ describe("accumulated guest stay requests", () => {
     expect(turn.searchDemandNow).toBe(false);
     expect(JSON.stringify(turn.uiMessages)).toContain(today);
     expect(JSON.stringify(turn.uiMessages)).toContain('missing');
+    expect(conciergeYearClarification(turn.demandMemory, initial)).toMatch(/^请补充入住年份/);
+    expect(conciergeYearClarification(turn.demandMemory, "你叫什么？")).toBeUndefined();
+    expect(conciergeYearClarification(turn.demandMemory, "Find available cabins")).toMatch(/^Which year/);
   });
 
   it("completes the exact reported conversation after the FIRST year clarification", () => {

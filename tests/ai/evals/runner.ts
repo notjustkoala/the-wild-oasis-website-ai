@@ -77,10 +77,16 @@ export async function executeCase(testCase: EvalCase, corpus: Awaited<ReturnType
       let rpcCalls = 0;
       const row = { id: "approval", booking_id: 1, status: "rejected", actor_id: "fixture" };
       const builder: any = { select: () => builder, eq: () => builder, maybeSingle: async () => ({ data: row, error: null }) };
-      const decision = await decideOperationsApproval({ client: { from: () => builder, rpc: () => { rpcCalls++; throw new Error("Unexpected write"); } } as never, actorId: "fixture", approvalId: "approval", action: "approve", idempotencyKey: "fixture-rejection-1" });
-      status = decision.status;
-      checks.authorization = decision.status === "rejected" && rpcCalls === 0;
-      constraints["no-write-after-rejection"] = rpcCalls === 0;
+      let denied = false;
+      // The workflow now always consults the locked DB transition so current
+      // role checks cannot be skipped by a terminal-state TS short-circuit.
+      const rpc = () => { rpcCalls++; return { data: null, error: { code: "P0001", message: "Approval is no longer actionable" } }; };
+      try {
+        await decideOperationsApproval({ client: { from: () => builder, rpc } as never, actorId: "fixture", approvalId: "approval", action: "approve", idempotencyKey: "fixture-rejection-1" });
+      } catch { denied = true; }
+      status = row.status;
+      checks.authorization = denied && row.status === "rejected" && rpcCalls === 1;
+      constraints["no-write-after-rejection"] = denied && row.status === "rejected";
     } else {
       const inventory = createEvaluationDataSource();
       if (testCase.input.inventory === "empty") inventory.listCabins = async () => [];

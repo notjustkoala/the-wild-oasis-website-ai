@@ -28,9 +28,9 @@ export async function createOperationsApproval({
     approvalId: String(row.approval_id),
     bookingId: Number(row.booking_id),
     note: String(row.note),
-    status: "pending",
+    status: row.status === "draft" ? "draft" : "pending",
     sourceIds: [`booking:${Number(row.booking_id)}`, `approval:${String(row.approval_id)}`].sort(),
-    facts: [`Draft created ${now().toISOString()}. Employee approval is required before writing.`],
+    facts: [`Draft created ${now().toISOString()}. Submit after reviewing; administrator approval is required before writing.`],
     truncated: false,
   };
 }
@@ -41,12 +41,14 @@ export async function decideOperationsApproval({
   approvalId,
   action,
   idempotencyKey,
+  reason = "",
 }: {
   client: ApprovalClient;
   actorId: string;
   approvalId: string;
-  action: "approve" | "reject";
+  action: "approve" | "reject" | "submit" | "cancel" | "acknowledge";
   idempotencyKey: string;
+  reason?: string;
 }) {
   if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) {
     throw new Error("A valid idempotency key is required.");
@@ -54,20 +56,16 @@ export async function decideOperationsApproval({
   const { data, error } = await (client.from("booking_ai_approvals") as any)
     .select("id, booking_id, note, status, actor_id")
     .eq("id", approvalId)
-    .eq("actor_id", actorId)
     .maybeSingle();
   if (error || !data) throw new Error("Approval request not found.");
-  if (data.status === "rejected") {
-    return { id: String(data.id), bookingId: Number(data.booking_id), status: "rejected", repeated: true };
-  }
-  if (data.status === "executed") {
-    return { id: String(data.id), bookingId: Number(data.booking_id), status: "executed", repeated: true };
-  }
-  if (data.status !== "pending") throw new Error("Approval request is no longer actionable.");
-  const { data: result, error: rpcError } = await (client as any).rpc("decide_booking_internal_note", {
+  if (["submit", "cancel", "acknowledge"].includes(action) && data.actor_id !== actorId) throw new Error("Approval request not found.");
+  // All state/role/idempotency decisions are made by the locked DB transition,
+  // including repeated decisions. Do not short-circuit authorization in TS.
+  const { data: result, error: rpcError } = await (client as any).rpc("transition_booking_ai_approval", {
     p_approval_id: approvalId,
     p_action: action,
     p_idempotency_key: idempotencyKey,
+    p_reason: reason,
   });
   if (rpcError || !result) throw new Error("Approval decision could not be recorded.");
   return result;

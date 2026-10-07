@@ -107,7 +107,7 @@ export type ApprovalProposal = {
   approvalId: string;
   bookingId: number;
   note: string;
-  status: "pending";
+  status: "draft" | "pending";
   sourceIds: string[];
   facts: string[];
   truncated: false;

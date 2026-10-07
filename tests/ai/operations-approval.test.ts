@@ -4,15 +4,15 @@ import { resolve } from "node:path";
 import { createOperationsApproval, decideOperationsApproval } from "@/app/_ai/operations-approval";
 
 describe("operations approval boundary", () => {
-  it("creates a pending approval and never claims that it executed", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: { approval_id: "a", booking_id: 7, note: "Call guest", status: "pending" }, error: null });
+  it("creates an unsubmitted draft and never claims that it executed", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { approval_id: "a", booking_id: 7, note: "Call guest", status: "draft" }, error: null });
     const proposal = await createOperationsApproval({ client: { from: vi.fn(), rpc } as never, actorId: "actor", bookingId: 7, note: " Call guest " });
     expect(rpc).toHaveBeenCalledWith("create_booking_ai_approval", { p_booking_id: 7, p_note: "Call guest" });
-    expect(proposal.status).toBe("pending");
+    expect(proposal.status).toBe("draft");
   });
 
-  it("does not retry a rejected approval", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: { id: "approval", status: "rejected" }, error: null });
+  it("delegates repeat rejection to the locked DB transition", async () => {
+    const rpc = vi.fn().mockResolvedValueOnce({ data: { id: "approval", bookingId: 7, status: "rejected", repeated: false }, error: null }).mockResolvedValue({ data: { id: "approval", bookingId: 7, status: "rejected", repeated: true }, error: null });
     const row = { id: "approval", booking_id: 7, note: "Call guest", status: "pending", actor_id: "actor" };
     const builder: Record<string, any> = { select: vi.fn(() => builder), eq: vi.fn(() => builder), maybeSingle: vi.fn(() => Promise.resolve({ data: row, error: null })) };
     const client = { from: vi.fn(() => builder), rpc } as never;
@@ -20,11 +20,11 @@ describe("operations approval boundary", () => {
     row.status = "rejected";
     const repeated = await decideOperationsApproval({ client, actorId: "actor", approvalId: "approval", action: "reject", idempotencyKey: "reject-key-654321" });
     expect(repeated).toEqual({ id: "approval", bookingId: 7, status: "rejected", repeated: true });
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(2);
   });
 
   it("executes an approved note once and returns a repeated result on duplicate submit", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: { id: "approval", bookingId: 7, status: "executed", repeated: false }, error: null });
+    const rpc = vi.fn().mockResolvedValueOnce({ data: { id: "approval", bookingId: 7, status: "executed", repeated: false }, error: null }).mockResolvedValue({ data: { id: "approval", bookingId: 7, status: "executed", repeated: true }, error: null });
     const row = { id: "approval", booking_id: 7, note: "Call guest", status: "pending", actor_id: "actor" };
     const builder: Record<string, any> = { select: vi.fn(() => builder), eq: vi.fn(() => builder), maybeSingle: vi.fn(() => Promise.resolve({ data: row, error: null })) };
     const client = { from: vi.fn(() => builder), rpc } as never;
@@ -33,7 +33,7 @@ describe("operations approval boundary", () => {
     row.status = "executed";
     const repeated = await decideOperationsApproval({ client, actorId: "actor", approvalId: "approval", action: "approve", idempotencyKey: "approve-key-123456" });
     expect(repeated).toEqual({ id: "approval", bookingId: 7, status: "executed", repeated: true });
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(2);
   });
 
   it("migration exposes only the internal note as the approval write", () => {

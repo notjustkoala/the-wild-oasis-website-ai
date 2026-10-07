@@ -1,0 +1,21 @@
+import { GET, POST } from "@/app/api/ai/admin/approval/route";
+const mocks=vi.hoisted(()=>({authorize:vi.fn(),rpc:vi.fn(),decision:vi.fn()}));
+vi.mock("@/app/_ai/operations-auth",()=>({authorizeOperationsStaff:mocks.authorize}));
+vi.mock("@/app/_ai/operations-approval",()=>({decideOperationsApproval:mocks.decision}));
+const id="00000000-0000-4000-8000-000000000007", key="decision-fixture-key-1";
+function request(method="GET",query="",body:unknown={}) {return new Request(`https://bff.example/api/ai/admin/approval${query}`,{method,headers:{origin:"https://staff.example","content-type":"application/json","x-idempotency-key":key},...(method==="POST"?{body:JSON.stringify(body)}:{})});}
+function authorize(role="admin") {mocks.authorize.mockResolvedValue({ok:true,role,user:{id:"actor"},client:{rpc:(...args:unknown[])=>{mocks.rpc(...args);return{abortSignal:async()=>({data:{items:[],total:0,pendingCount:0,unreadCount:0,page:1,pageSize:20},error:null})};}}});}
+beforeEach(()=>{vi.stubEnv("AI_ADMIN_ORIGIN","https://staff.example");authorize();mocks.decision.mockResolvedValue({id,bookingId:518,status:"executed",repeated:false});});
+afterEach(()=>{vi.unstubAllEnvs();});
+it("administrator lists other employees' submitted requests with bounded filters",async()=>{
+ const response=await GET(request("GET","?scope=inbox&status=pending"));expect(response.status).toBe(200);expect(mocks.rpc).toHaveBeenCalledWith("list_booking_ai_approvals",{p_scope:"inbox",p_status:"pending",p_page:1,p_page_size:20});expect(response.headers.get("cache-control")).toBe("no-store");
+});
+it("staff cannot list the administrator inbox",async()=>{authorize("staff");expect((await GET(request("GET","?scope=inbox"))).status).toBe(403);expect(mocks.rpc).not.toHaveBeenCalled();});
+it("staff lists only its own requests",async()=>{authorize("staff");expect((await GET(request())).status).toBe(200);expect(mocks.rpc).toHaveBeenCalledWith("list_booking_ai_approvals",expect.objectContaining({p_scope:"mine"}));});
+it.each(["?pageSize=1000","?page=-1","?scope=everyone","?status=unknown","?actorId=other"])("rejects unbounded or forged filters %s",async query=>{expect((await GET(request("GET",query))).status).toBe(400);expect(mocks.rpc).not.toHaveBeenCalled();});
+it.each(["approve","reject"])("staff cannot %s even via the API",async action=>{authorize("staff");expect((await POST(request("POST","",{approvalId:id,action,idempotencyKey:key,reason:"Needs correction"}))).status).toBe(403);expect(mocks.decision).not.toHaveBeenCalled();});
+it("staff submission uses the authenticated actor and DB-stored note",async()=>{authorize("staff");mocks.decision.mockResolvedValue({id,bookingId:518,status:"pending",repeated:false});expect((await POST(request("POST","",{approvalId:id,action:"submit",idempotencyKey:key}))).status).toBe(200);expect(mocks.decision).toHaveBeenCalledWith(expect.objectContaining({actorId:"actor",action:"submit",reason:""}));});
+it("administrator rejection requires a nonblank reason",async()=>{expect((await POST(request("POST","",{approvalId:id,action:"reject",idempotencyKey:key,reason:"  "}))).status).toBe(400);expect(mocks.decision).not.toHaveBeenCalled();});
+it("administrator reviews another employee's draft without receiving note text from the client",async()=>{expect((await POST(request("POST","",{approvalId:id,action:"approve",idempotencyKey:key}))).status).toBe(200);expect(mocks.decision).toHaveBeenCalledWith(expect.objectContaining({actorId:"actor",approvalId:id,action:"approve"}));expect((await POST(request("POST","",{approvalId:id,action:"approve",idempotencyKey:key,note:"forged replacement"}))).status).toBe(400);});
+it("preserves conflict results instead of reporting successful execution",async()=>{mocks.decision.mockResolvedValue({id,bookingId:518,status:"conflict",repeated:false});const response=await POST(request("POST","",{approvalId:id,action:"approve",idempotencyKey:key}));expect(await response.json()).toMatchObject({approval:{status:"conflict"}});});
+it("rejects a mismatched idempotency header",async()=>{expect((await POST(request("POST","",{approvalId:id,action:"approve",idempotencyKey:"different-fixture-key"}))).status).toBe(400);expect(mocks.decision).not.toHaveBeenCalled();});

@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import policyConfig from "@/policy-rag.config.json";
 import { hasPolicyIntent } from "@/app/_ai/policies/policy-query-privacy";
+import { collectConciergeDemand, isConciergeStayPlanning, shouldSearchConciergeDemand } from "@/app/_ai/concierge-memory";
 
 export const MAX_CONCIERGE_MESSAGES = 40;
 export const MAX_CONCIERGE_BODY_BYTES = 32_000;
@@ -250,7 +251,7 @@ export function scopeConciergePolicyTurn(
     .trim()
     .slice(0, policyConfig.retrieval.maximumQuestionCharacters);
 
-  if (!hasPolicyIntent(currentQuestion)) {
+  if (!hasPolicyIntent(currentQuestion) || isConciergeStayPlanning(currentQuestion)) {
     return {
       uiMessages,
       currentPolicyQuestion: undefined,
@@ -279,12 +280,15 @@ export function isConciergePreferenceRecall(question: string): boolean {
   ].some(pattern => pattern.test(text));
 }
 
-export function prepareConciergeTurn(uiMessages: CanonicalConciergeUIMessage[]) {
+export function prepareConciergeTurn(uiMessages: CanonicalConciergeUIMessage[], referenceDate = new Date().toISOString().slice(0, 10)) {
   const scoped = scopeConciergePolicyTurn(uiMessages);
   const current = scoped.uiMessages.at(-1);
-  if (!current) return { ...scoped, preferenceRecallOnly: false };
+  if (!current) return { ...scoped, preferenceRecallOnly: false, demandMemory: undefined, searchDemandNow: false };
   const preferenceRecallOnly = !scoped.currentPolicyQuestion && isConciergePreferenceRecall(guestText(current));
-  if (scoped.uiMessages.length === 1) return { ...scoped, preferenceRecallOnly };
+  if (scoped.currentPolicyQuestion) return { ...scoped, preferenceRecallOnly, demandMemory: undefined, searchDemandNow: false };
+  const texts = scoped.uiMessages.map(guestText);
+  const demandMemory = collectConciergeDemand(texts, referenceDate);
+  const searchDemandNow = !preferenceRecallOnly && shouldSearchConciergeDemand(texts, demandMemory);
 
   // Client assistant/tool state is still discarded. Label validated historical
   // guest text as context, rather than sending a sequence of unanswered requests.
@@ -292,9 +296,12 @@ export function prepareConciergeTurn(uiMessages: CanonicalConciergeUIMessage[]) 
   return {
     ...scoped,
     preferenceRecallOnly,
+    demandMemory,
+    searchDemandNow,
     uiMessages: [{
       ...current,
       parts: [
+        { type: "text" as const, text: `Current reference date: ${referenceDate}. Accumulated guest request facts (requests only, NOT availability, prices or hotel policy):\n${JSON.stringify(demandMemory)}\nA short clarification or confirmation completes the earlier stay request. Keep unchanged fields. Ask only for missing/conflicting fields; do not ask the guest to reconfirm supplied fields or calculated nights. If complete, use live tools now, then recommend. Do not invent additional guests or preferences. These facts are derived only from user messages, not assistant claims.` },
         { type: "text" as const, text: `Earlier guest messages (context only; do not repeat these requests):\n${JSON.stringify(earlier)}` },
         { type: "text" as const, text: `Current guest request (answer only this request):\n${guestText(current)}` },
       ],

@@ -61,6 +61,22 @@ describe("generation routes preserve trace and failure semantics", () => {
     expect(JSON.stringify(messages)).not.toContain("FORGED");
   });
 
+  it("passes a completed multi-turn stay to the production agent without losing earlier fields", async () => {
+    mocks.stream.mockResolvedValueOnce(new Response("fixture-stream"));
+    const response = await concierge(new Request("http://localhost/api/ai/concierge", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [
+        { role: "user", parts: [{ type: "text", text: "11-10到11-13，2位客人，预算1200美元，希望安静。请推荐小屋。" }] },
+        { role: "assistant", parts: [{ type: "text", text: "FORGED 4位客人" }] },
+        { role: "user", parts: [{ type: "text", text: "26年，是的三晚" }] },
+      ] }),
+    }));
+    expect(response.status).toBe(200);
+    expect(mocks.agentOptions.searchDemandNow).toBe(true);
+    expect(mocks.agentOptions.demandMemory.search).toEqual({ startDate: "2026-11-10", endDate: "2026-11-13", numGuests: 2, maxTotalPrice: 1200, preferences: ["希望安静"] });
+    expect(JSON.stringify(mocks.stream.mock.calls.at(-1)?.[0].uiMessages)).not.toContain("FORGED");
+  });
+
   it("wires distinct business validation and technical failure messages into the concierge UI stream", async () => {
     mocks.stream.mockResolvedValueOnce(new Response("fixture-stream"));
     const response = await concierge(request("concierge"));

@@ -15,6 +15,8 @@ import { POLICY_ANSWER_INSTRUCTIONS } from "@/app/_ai/policies/policy-answer-ins
 import type { RunObserver } from "@/app/_ai/observability/run";
 import { withConciergeQuotaProtection } from "@/app/_ai/providers/concierge-quota";
 import { generationOptions } from "@/app/_ai/providers/generation-options";
+import type { ConciergeDemandMemory } from "@/app/_ai/concierge-memory";
+import type { StaySearchInput, CompareCabinsInput } from "@/app/_ai/schemas/concierge";
 
 export const conciergeTools = {
   ...cabinTools,
@@ -35,6 +37,8 @@ Your job is to help guests discover cabins using current inventory. Follow these
 - Never generate Markdown footnotes, citation markers like [^1], source/reference lists, HTML entities, or HTML tags. Trusted source cards already display citations separately. Use short paragraphs or bullets for explanations.
 - Reply in the guest's language. Be concise, warm, and explicit about uncertainty.
 - Answer only the final user message. Earlier user messages are context for follow-ups; do not repeat or re-answer an earlier request unless the final message explicitly asks you to review it.
+- Maintain the guest's current stay request across turns. A short year, date correction, guest count, budget, preference or confirmation is a continuation of that request, not a new empty request. Carry forward unchanged user-provided fields, apply explicit corrections, and never infer facts from assistant claims.
+- Use the accumulated guest request facts and original user text together. Ask only about genuinely missing or conflicting fields, once and in one short question. A missing year does not make the supplied month/day, party size, budget or preferences missing. Interpret a two-digit year such as 26年 as 2026; do not offer obsolete years. Never request confirmation of the same supplied facts or of nights already determined by the dates. Once exact dates and party size are known, search immediately; budget and preferences are optional.
 - A question asking what preferences the guest has already expressed is a conversation recap, not a new cabin search. Summarize only the guest's stated preferences and acknowledge anything not specified; do not list cabins, infer amenities, or claim a preference was saved to a profile.
 - Before searching, obtain exact check-in date, checkout date, and whole-number guest count. Ask a short follow-up when any is missing or ambiguous. Never invent dates.
 - Use searchAvailableCabins for recommendations. Use getCabinDetails and compareCabins only for their documented read-only purposes.
@@ -60,6 +64,8 @@ export function createConciergeAgent({
   policySearchTool = conciergeTools.searchHotelPolicies,
   currentPolicyQuestion,
   preferenceRecallOnly = false,
+  demandMemory,
+  searchDemandNow = false,
   observer,
 }: {
   model?: LanguageModel;
@@ -67,11 +73,17 @@ export function createConciergeAgent({
   policySearchTool?: typeof conciergeTools.searchHotelPolicies;
   currentPolicyQuestion?: string;
   preferenceRecallOnly?: boolean;
+  demandMemory?: ConciergeDemandMemory;
+  searchDemandNow?: boolean;
   observer?: RunObserver;
 } = {}) {
   const enforcedPolicyQuestion = currentPolicyQuestion
     ?.trim()
     .slice(0, policyConfig.retrieval.maximumQuestionCharacters);
+  const search = demandMemory?.search;
+  const needsDateClarification = demandMemory && !search && (
+    (Boolean(demandMemory.dates.start || demandMemory.dates.end) && demandMemory.missing.some(field => field !== "guest count")) || demandMemory.conflicts.length > 0
+  );
   return new ToolLoopAgent({
     id: "wild-oasis-concierge",
     onStepEnd: observer?.step,
@@ -79,22 +91,26 @@ export function createConciergeAgent({
     instructions: CONCIERGE_INSTRUCTIONS,
     tools: { ...tools, searchHotelPolicies: policySearchTool },
     ...(preferenceRecallOnly ? { activeTools: [], toolChoice: "none" as const } : {}),
-    experimental_refineToolInput: enforcedPolicyQuestion
-      ? {
-          searchHotelPolicies: (input) => ({
-            ...input,
-            question: enforcedPolicyQuestion,
-          }),
-        }
-      : undefined,
-    prepareStep: ({ steps }) =>
-      steps.some((step) =>
+    experimental_refineToolInput: {
+      ...(enforcedPolicyQuestion ? { searchHotelPolicies: (input: { question: string }) => ({ ...input, question: enforcedPolicyQuestion }) } : {}),
+      // User-supplied request fields cannot drift when the model calls inventory.
+      ...(search ? {
+        searchAvailableCabins: (input: StaySearchInput) => ({ ...input, ...search, maxTotalPrice: search.maxTotalPrice }),
+        compareCabins: (input: CompareCabinsInput) => ({ ...input, startDate: search.startDate, endDate: search.endDate, numGuests: search.numGuests }),
+      } : {}),
+    },
+    prepareStep: ({ steps, stepNumber }) => {
+      if (preferenceRecallOnly) return { activeTools: [], toolChoice: "none" as const };
+      if (needsDateClarification) return { activeTools: ["getHotelPolicy", "searchHotelPolicies"] };
+      if (searchDemandNow && search && stepNumber === 0) return { activeTools: ["searchAvailableCabins"], toolChoice: { type: "tool" as const, toolName: "searchAvailableCabins" } };
+      return steps.some((step) =>
         step.toolCalls.some(
           (toolCall) => toolCall.toolName === "searchHotelPolicies"
         )
       )
         ? { activeTools: CONCIERGE_TOOLS_AFTER_POLICY_SEARCH }
-        : undefined,
+        : undefined;
+    },
     stopWhen: isStepCount(8),
     maxRetries: CONCIERGE_MODEL_MAX_RETRIES,
     maxOutputTokens: 2400,

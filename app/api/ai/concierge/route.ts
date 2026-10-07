@@ -46,6 +46,8 @@ export async function POST(request: Request) {
     const agent = createConciergeAgent({
       currentPolicyQuestion: turn.currentPolicyQuestion,
       preferenceRecallOnly: turn.preferenceRecallOnly,
+      demandMemory: turn.demandMemory,
+      searchDemandNow: turn.searchDemandNow,
       observer: run,
     });
     return await createAgentUIStreamResponse({

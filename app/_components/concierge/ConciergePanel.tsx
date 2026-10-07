@@ -130,10 +130,6 @@ export default function ConciergePanel({ chatAdapter }: ConciergePanelProps = {}
   useEffect(() => () => { void activeChat.current.stop(); }, []);
 
   const closePanel = useCallback(() => {
-    if (activeChat.current.busy) {
-      void activeChat.current.stop();
-      setWasCancelled(true);
-    }
     setOpen(false);
     requestAnimationFrame(() => launcherRef.current?.focus());
   }, []);

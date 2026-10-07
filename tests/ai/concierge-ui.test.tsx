@@ -240,7 +240,7 @@ describe("ConciergePanel production UI states", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Received text and cards are kept");
   });
 
-  it("cancels on closing or unmounting and does not submit while composing Chinese text", async () => {
+  it("keeps a hidden generation running but cancels on unmount, and respects Chinese composition", async () => {
     const user = userEvent.setup();
     const adapter = createAdapter();
     const { rerender, unmount } = render(<ConciergePanel chatAdapter={adapter} />);
@@ -251,9 +251,13 @@ describe("ConciergePanel production UI states", () => {
     expect(adapter.sendMessage).not.toHaveBeenCalled();
     rerender(<ConciergePanel chatAdapter={{ ...adapter, status: "streaming" }} />);
     await interact(() => user.keyboard("{Escape}"));
-    expect(adapter.stop).toHaveBeenCalledOnce();
+    expect(adapter.stop).not.toHaveBeenCalled();
+    rerender(<ConciergePanel chatAdapter={{ ...adapter, status: "ready", messages: [assistantMessage([{ type: "text", text: "Complete answer while hidden", state: "done" }])] }} />);
+    await openPanel(user);
+    expect(screen.getByText("Complete answer while hidden")).toBeVisible();
+    expect(screen.queryByText(/Response cancelled/)).not.toBeInTheDocument();
     unmount();
-    expect(adapter.stop).toHaveBeenCalledTimes(2);
+    expect(adapter.stop).toHaveBeenCalledOnce();
   });
   beforeEach(() => {
     mocks.adoptDraft.mockReset();

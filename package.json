@@ -12,6 +12,7 @@
     "test:ai": "vitest run tests/ai",
     "eval:ai": "node scripts/eval-ai.mjs",
     "eval:ai:live": "node scripts/live-ai.mjs",
+    "eval:ai:dashscope": "node scripts/eval-dashscope-closeout.mjs",
     "ai:observe": "node scripts/ai-observe.mjs",
     "test:e2e": "playwright test",
     "test:e2e:security": "playwright test --grep @security",

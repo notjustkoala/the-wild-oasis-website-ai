@@ -16,18 +16,18 @@ control of facts, authorization and mutations.
 
 | Surface | What it demonstrates | Source | Production |
 | --- | --- | --- | --- |
-| Guest Experience + AI BFF | Streaming recommendations, policy Q&A, editable reservation prefill | this repository | Not deployed/verified |
-| Staff Operations | Risk Briefing, KPI/chart/booking cards, approval workflow | [paired admin](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/README.md) | Not deployed/verified |
+| Guest Experience + AI BFF | Streaming recommendations, policy Q&A, editable reservation prefill | this repository | [Vercel production](https://the-wild-oasis-website-ai.vercel.app) |
+| Staff Operations | Risk Briefing, KPI/chart/booking cards, approval workflow | [paired admin](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/README.md) | [Vercel production](https://the-wild-oasis-ai.vercel.app) |
 | Portfolio evidence | architecture, case study, timed demo, eval and resume claims | [case study](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/CASE_STUDY.md) | Local/versioned artifacts |
 
 Cross-repository links target the published `main` branches in two independent
 GitHub origins. Feature06 source publication and Markdown link checks are
-complete; application deployment URLs still require production verification.
+complete; both production URLs and their exact-origin BFF binding are verified.
 
-`guest.example` and `staff.example` are target-role placeholders, not live URLs.
-The [deployment runbook](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/DEPLOYMENT_RUNBOOK.md)
-requires real HTTPS URLs and explicit smoke verification before they are shown as
-deployed.
+Both repository production smoke commands passed on 2026-10-08. They verify
+HTTPS reachability and application markers. Auth, model, database and approval
+checks are reported separately in the
+[deployment runbook](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/DEPLOYMENT_RUNBOOK.md).
 
 ![Wild Oasis dual-surface architecture](https://raw.githubusercontent.com/notjustkoala/the-wild-oasis-ai/main/docs/portfolio/assets/architecture.svg)
 
@@ -37,7 +37,9 @@ staff tools, and stores privacy-minimized telemetry. Concierge has no booking
 mutation tool: **Adopt plan** only prefills the existing form, whose trusted
 server action rechecks capacity, price and overlap. Staff calls carry an
 employee JWT, are reauthorized from `app_metadata.role`, and the sole Copilot
-write pauses for explicit approval or rejection.
+write creates an unsubmitted draft. The employee submits it, and a different
+administrator approves or rejects it. Execution only replaces `internalNote`;
+it never performs refunds, charges or booking-status changes.
 
 ## Engineering choices
 
@@ -56,7 +58,7 @@ write pauses for explicit approval or rejection.
 
 The interview path is Guest complex request → live recommendation → reservation
 prefill; Staff special request → Risk Briefing → correction; then Copilot
-question → KPI/chart/order evidence → reject or approve a note. It closes on an
+question → KPI/chart/order evidence → submit a draft → administrator review. It closes on an
 unauthorized request and eval/tracing evidence. Use the
 [timed script](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/DEMO_SCRIPT.md); the backup
 recording and three human-timed runs remain pending.
@@ -487,17 +489,20 @@ Cross-repository progress and human acceptance requirements are in
 
 ## Limitations and future work
 
-- There is no verified public URL, production smoke result, distributable demo
-  account, backup video or independent-reader acceptance yet.
+- Both public HTTPS URLs and repository production smoke are verified. Account
+  credentials are not distributed. The [automated backup recording](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/assets/video/README.md)
+  uses synthetic HTTP/auth data; human rehearsals and independent-reader acceptance remain pending.
 - Browser screenshots use HTTP fixtures; they do not prove provider, database or
   production availability. The first real-model ten-scenario run was 8/10, with
   both failures later passing separate one-case retries—not one 10/10 run.
-- Model cost remains unknown without a dated, sourced price file. No growth,
-  conversion, revenue or uptime claim is made.
+- [Current DashScope streaming evaluation and cost](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/CURRENT_MODEL_EVALUATION.md)
+  use measured usage and official dated CNY list prices; historical Gemini cost
+  remains unknown. No growth, conversion, revenue or uptime claim is made.
 - Deterministic seed generation remains local-file-only and targets an empty
   dataset. The fixed-provenance reset/Cron chain is versioned but default-disabled;
-  it is not evidence of an applied migration or active remote schedule.
-- Future work is to deploy the isolated demo stack, configure platform WAF or
-  distributed throttling, verify and activate the transactional reset in the
-  isolated Demo Project, record the privacy-reviewed fallback video and complete
-  human demo validation.
+  migrations and rollback-only SQL have passed on the isolated Demo Project;
+  actual enabled scheduling is recorded separately.
+- Future work includes persistent cross-device chat memory and human validation
+  of the demo narrative. Signed feedback records are available; automatic learning
+  is deliberately deferred. Remaining delivery work is tracked in the
+  [delivery closeout](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/DELIVERY_CLOSEOUT.md).

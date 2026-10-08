@@ -60,8 +60,8 @@ The interview path is Guest complex request → live recommendation → reservat
 prefill; Staff special request → Risk Briefing → correction; then Copilot
 question → KPI/chart/order evidence → submit a draft → administrator review. It closes on an
 unauthorized request and eval/tracing evidence. Use the
-[timed script](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/DEMO_SCRIPT.md); the backup
-recording and three human-timed runs remain pending.
+[timed script](https://github.com/notjustkoala/the-wild-oasis-ai/blob/main/docs/portfolio/DEMO_SCRIPT.md). The captioned automated backup
+recording is available; three human-timed runs remain pending.
 
 Demo identity labels describe roles, not committed usernames or passwords:
 `DEMO_GUEST` is a customer; `DEMO_ADMIN` uses the existing admin role only for

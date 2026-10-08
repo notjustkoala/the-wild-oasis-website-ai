@@ -15,11 +15,26 @@ function isConnectTimeout(error: unknown) {
   }
   return false;
 }
+
+/** Same Beijing service/key/model; never switch regions or replay an active SSE. */
+export function dashscopeConnectFallback(input: Parameters<typeof globalThis.fetch>[0]): string | undefined {
+  try {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.protocol !== "https:" || url.port || url.username || url.password || url.search || url.hash
+      || !/^(?:ws|llm)-[a-z0-9-]+\.cn-beijing\.maas\.aliyuncs\.com$/i.test(url.hostname)
+      || !["/compatible-mode/v1/chat/completions", "/compatible-mode/v1/embeddings"].includes(url.pathname)) return undefined;
+    return `https://dashscope.aliyuncs.com${url.pathname}`;
+  } catch { return undefined; }
+}
+
 export function createDashScopeTransport(env: NodeJS.ProcessEnv = process.env): typeof globalThis.fetch {
   const direct: typeof globalThis.fetch = async (input, init) => undiciFetch(input as RequestInfo, { ...(init as RequestInit), dispatcher }) as unknown as Promise<Response>;
   const fetch = env.DASHSCOPE_HTTPS_PROXY?.trim() ? createProxyAwareFetch(dashscopeTransportEnvironment(env)) : direct;
   return async (input, init) => {
     const endpoint = String(input).endsWith("/embeddings") ? "embedding" : "chat";
+    const fallback = dashscopeConnectFallback(input);
+    const replayable = !(input instanceof Request) && (init?.body == null || typeof init.body === "string");
+    let target = input;
     // A connect timeout occurs before a request can reach the model. Retry it
     // once, but never replay a header/body timeout, HTTP failure or active stream.
     for (let attempt = 1; attempt <= 2; attempt++) {
@@ -28,14 +43,14 @@ export function createDashScopeTransport(env: NodeJS.ProcessEnv = process.env): 
       const timer = setTimeout(() => controller.abort(new DOMException("Model response headers timed out.", "TimeoutError")), 25_000);
       const signal = init?.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
       try {
-        const response = await fetch(input, { ...init, signal, cache: "no-store" });
-        console.info(JSON.stringify({ event: "dashscope-transport", endpoint, status: response.status, headersMs: Date.now() - start }));
+        const response = await fetch(target, { ...init, signal, cache: "no-store" });
+        console.info(JSON.stringify({ event: "dashscope-transport", endpoint, route: target === input ? "primary" : "same-region-backup", status: response.status, headersMs: Date.now() - start }));
         return response;
       } catch (error) {
         const connectTimeout = isConnectTimeout(error);
-        const retrying = attempt === 1 && connectTimeout && !signal.aborted;
-        console.warn(JSON.stringify({ event: "dashscope-transport", endpoint, failed: true, phase: connectTimeout ? "connect" : "request", attempt, retrying, headersMs: Date.now() - start }));
-        if (retrying) continue;
+        const retrying = attempt === 1 && connectTimeout && !signal.aborted && replayable;
+        console.warn(JSON.stringify({ event: "dashscope-transport", endpoint, route: target === input ? "primary" : "same-region-backup", failed: true, phase: connectTimeout ? "connect" : "request", attempt, retrying, headersMs: Date.now() - start }));
+        if (retrying) { target = fallback ?? input; continue; }
         throw new Error("The model connection could not complete this request.", { cause: error });
       } finally { clearTimeout(timer); }
     }

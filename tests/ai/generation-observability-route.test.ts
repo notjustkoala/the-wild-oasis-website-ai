@@ -119,6 +119,19 @@ describe("generation routes preserve trace and failure semantics", () => {
     it(`${surface}: records client cancellation exactly once`, async () => { const control = new AbortController(); control.abort(); await post(request(surface, { signal: control.signal })); expect(mocks.persist).toHaveBeenCalledTimes(1); expect(mocks.persist).toHaveBeenCalledWith(expect.objectContaining({ status: "cancelled" })); });
   }
   it("contains authorization infrastructure failure", async () => { mocks.authorize.mockRejectedValue(new Error("private")); const response = await operations(request("admin")); expect(response.status).toBe(503); expect(mocks.persist).toHaveBeenCalledTimes(1); });
+  it("operations streaming failures expose a safe category and a trace-correlated diagnostic", async () => {
+    mocks.stream.mockResolvedValue(new Response("fixture-stream"));
+    const response = await operations(request("admin", { accept: "text/event-stream" }));
+    const onError = mocks.stream.mock.calls.at(-1)?.[0].onError;
+    const error = { name: "TypeError", message: "PRIVATE USER EMAIL", cause: { code: "UND_ERR_CONNECT_TIMEOUT", message: "PRIVATE HOST KEY" } };
+    expect(onError(error)).toBe(`The model service could not be reached. Please try again. Reference: ${response.headers.get("X-AI-Trace-Id")}`);
+    const diagnostic = JSON.parse(mocks.consoleError.mock.calls.at(-1)![0]);
+    expect(diagnostic).toMatchObject({ event: "operations-generation-failed", mode: "stream", traceId: response.headers.get("X-AI-Trace-Id"), code: "network-error" });
+    expect(JSON.stringify(mocks.consoleError.mock.calls)).not.toMatch(/PRIVATE USER|PRIVATE HOST|EMAIL|KEY/);
+    mocks.consoleError.mockImplementationOnce(() => { throw new Error("Logging unavailable"); });
+    expect(() => onError(error)).not.toThrow();
+  });
+
   it("operations retains tool-error status even when the model produces final text", async () => {
     mocks.generate.mockImplementation(async () => { mocks.observer.step({ toolCalls: [{ toolName: "getArrivals" }], content: [{ type: "tool-error" }], usage: { inputTokens: 5, outputTokens: 1 } }); return { text: "Unable to retrieve arrivals.", finishReason: "stop", steps: [] }; });
     expect((await operations(request("admin"))).status).toBe(200); expect(mocks.persist).toHaveBeenCalledWith(expect.objectContaining({ status: "failed", error_code: "tool-error", tool_error_count: 1 }));

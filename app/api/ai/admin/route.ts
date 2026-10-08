@@ -9,6 +9,7 @@ import { readOperationsRequest } from "@/app/_ai/operations-request";
 import { prepareOperationsTurn } from "@/app/_ai/operations-turn";
 import { getOperationsProviderConfigurationError } from "@/app/_ai/providers/operations-model";
 import { FALLBACK_GENERATION_ERROR_DIAGNOSTIC, safeGenerationErrorDiagnostic } from "@/app/_ai/observability/error-diagnostic";
+import { operationsStreamErrorMessage } from "@/app/_ai/operations-stream-error";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 100;
@@ -91,7 +92,13 @@ export async function POST(request: Request) {
       abortSignal: request.signal,
       timeout: CONCIERGE_TIMEOUT,
       experimental_transform: [run.transform(request.signal), createConciergeAbortRecoveryTransform(request.signal)],
-      onError: () => `The operations copilot could not complete this request. Reference: ${run.traceId}`,
+      onError: (error) => {
+        const diagnostic = safeGenerationErrorDiagnostic(error, request.signal.aborted);
+        try {
+          console.error(JSON.stringify({ event: "operations-generation-failed", surface: "operations", route: "/api/ai/admin", mode: "stream", traceId: run.traceId, ...diagnostic, durationMs: Math.max(0, Date.now() - generationStartedAt) }));
+        } catch { /* Diagnostic logging must never replace the safe response. */ }
+        return operationsStreamErrorMessage(error, run.traceId);
+      },
     });
     response.headers.forEach((value, key) => cors.headers.set(key, value));
     cors.headers.set("Cache-Control", "no-store");

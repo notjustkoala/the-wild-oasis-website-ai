@@ -1,17 +1,16 @@
-import CabinList from "../_components/CabinList";
-import { Suspense } from "react";
-import Spinner from "../_components/Spinner";
-import Filter from "../_components/Filter";
+import CabinCatalog from "../_components/CabinCatalog";
+import { getPublicCabins } from "../_lib/public-cabin-data";
 import ReservationReminder from "../_components/ReservationReminder";
 
 export const metadata = {
   title: "Cabins",
 };
 
-export const dynamic = "force-dynamic";
+export const dynamic = "error";
+export const revalidate = 3600;
 
-export default function Page({ searchParams }) {
-  const filter = searchParams?.capacity ?? "all";
+export default async function Page() {
+  const cabins = await getPublicCabins();
 
   return (
     <div>
@@ -27,14 +26,8 @@ export default function Page({ searchParams }) {
         Welcome to paradise.
       </p>
 
-      <div className="flex justify-end mb-8">
-        <Filter />
-      </div>
-
-      <Suspense fallback={<Spinner />} key={filter}>
-        <CabinList filter={filter} />
-        <ReservationReminder />
-      </Suspense>
+      <CabinCatalog cabins={cabins} />
+      <ReservationReminder />
     </div>
   );
 }

@@ -1,8 +1,10 @@
-import Link from "next/link";
-import { auth } from "../_lib/auth";
+"use client";
 
-export default async function Navigation() {
-  const session = await auth();
+import Link from "next/link";
+import { useGuestSession } from "./GuestSessionProvider";
+
+export default function Navigation() {
+  const { user } = useGuestSession();
 
   return (
     <nav className="z-10 text-base sm:text-xl">
@@ -24,15 +26,15 @@ export default async function Navigation() {
           </Link>
         </li>
         <li>
-          {session?.user?.image ? (
+          {user?.image ? (
             <Link
               href="/account"
               className="hover:text-accent-400 transition-colors flex items-center gap-4"
             >
               <img
-                src={session.user.image}
+                src={user.image}
                 className="h-8 rounded-full"
-                alt={session.user.name}
+                alt={user.name ?? "Guest avatar"}
                 referrerPolicy="no-referrer"
               />
               <span>Guest area</span>

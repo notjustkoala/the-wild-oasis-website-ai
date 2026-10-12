@@ -1,19 +1,6 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-
-function Filter() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathName = usePathname();
-
-  const activeFilter = searchParams.get("capacity") ?? "all";
-
-  function handleFilter(filter) {
-    const params = new URLSearchParams(searchParams);
-    params.set("capacity", filter);
-    router.replace(`${pathName}?${params.toString()}`, { scroll: false });
-  }
+function Filter({ activeFilter, onFilter: handleFilter }) {
 
   return (
     <div className="border border-primary-800 flex">

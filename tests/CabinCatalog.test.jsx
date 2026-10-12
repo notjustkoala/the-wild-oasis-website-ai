@@ -1,0 +1,20 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
+import { afterEach, expect, it, vi } from "vitest";
+vi.mock("@/app/_components/CabinCard", () => ({ default: ({ cabin }) => <h3>{cabin.name}</h3> }));
+import CabinCatalog from "@/app/_components/CabinCatalog";
+const cabins = [{ id: 1, name: "Small cabin", maxCapacity: 2 }, { id: 2, name: "Large cabin", maxCapacity: 8 }];
+afterEach(() => { cleanup(); window.history.replaceState(null, "", "/"); });
+it("prerenders the full list while query-string filtering stays in the browser", () => {
+  const html = renderToString(<CabinCatalog cabins={cabins} />);
+  expect(html).toContain("Small cabin");
+  expect(html).toContain("Large cabin");
+  window.history.replaceState(null, "", "/cabins?capacity=small");
+  render(<CabinCatalog cabins={cabins} />);
+  expect(screen.getByText("Small cabin")).toBeInTheDocument();
+  expect(screen.queryByText("Large cabin")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "8—12 guests" }));
+  expect(window.location.search).toBe("?capacity=large");
+  expect(screen.getByText("Large cabin")).toBeInTheDocument();
+  expect(screen.queryByText("Small cabin")).not.toBeInTheDocument();
+});

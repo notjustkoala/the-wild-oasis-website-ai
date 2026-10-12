@@ -3,9 +3,9 @@
 import { useReservation } from "./ReservationContext";
 import { createBooking } from "../_lib/actions";
 import SubmitButton from "./SubmitButton";
-import { getStayQuote, toDateOnly } from "../_lib/booking-domain";
+import { getStayQuote, isStayRangeAvailable, toDateOnly } from "../_lib/booking-domain";
 
-function ReservationForm({ cabin, user }) {
+function ReservationForm({ cabin, user, settings, bookedDates }) {
   const { range, resetRange, draft } = useReservation();
 
   const { maxCapacity, regularPrice, discount, id } = cabin;
@@ -19,6 +19,10 @@ function ReservationForm({ cabin, user }) {
     regularPrice,
     discount,
   });
+  const validDates = numNights >= (settings?.minBookingLength ?? 1)
+    && numNights <= (settings?.maxBookingLength ?? Infinity)
+    && toDateOnly(startDate) >= toDateOnly(new Date())
+    && isStayRangeAvailable(range, bookedDates ?? []);
 
   return (
     <div className="scale-[1.01] h-full">
@@ -26,14 +30,14 @@ function ReservationForm({ cabin, user }) {
         <p>Logged in as</p>
 
         <div className="flex gap-5 items-center">
-          <img
+          {user.image ? <img
             // Important to display google profile images
             referrerPolicy="no-referrer"
             className="h-8 rounded-full"
             src={user.image}
-            alt={user.name}
-          />
-          <p>{user.name}</p>
+            alt={user.name ?? "Guest avatar"}
+          /> : null}
+          <p>{user.name ?? "Guest"}</p>
         </div>
       </div>
 
@@ -91,6 +95,8 @@ function ReservationForm({ cabin, user }) {
         <div className="flex justify-end items-center gap-10">
           {numNights < 1 ? (
             <p className="text-primary-300 text-lg">Start by selecting dates</p>
+          ) : !validDates ? (
+            <p role="alert" className="text-amber-300 text-lg">Select available dates within the current booking limits.</p>
           ) : (
             <SubmitButton pendingLabel="Reserving">Reserve now</SubmitButton>
           )}

@@ -1,20 +1,23 @@
 import Reservation from "@/app/_components/Reservation";
 import Cabin from "@/app/_components/Cabin";
-import Spinner from "@/app/_components/Spinner";
-import { getCabin } from "@/app/_lib/data-service";
+import { getPublicCabin, getPublicCabins } from "@/app/_lib/public-cabin-data";
 
-import { Suspense } from "react";
-import ReservationReminder from "@/app/_components/ReservationReminder";
+export const dynamic = "error";
+export const dynamicParams = true;
+export const revalidate = 3600;
 
-export const dynamic = "force-dynamic";
+export async function generateStaticParams() {
+  const cabins = await getPublicCabins();
+  return cabins.map(cabin => ({ cabinId: String(cabin.id) }));
+}
 
 export async function generateMetadata({ params }) {
-  const { name } = await getCabin(params.cabinId);
+  const { name } = await getPublicCabin(params.cabinId);
   return { title: `Cabin ${name}` };
 }
 
 export default async function Page({ params }) {
-  const cabin = await getCabin(params.cabinId);
+  const cabin = await getPublicCabin(params.cabinId);
 
   return (
     <div className="max-w-6xl mx-auto mt-8">
@@ -24,9 +27,7 @@ export default async function Page({ params }) {
           Reserve {cabin.name} today. Pay on arrival.
         </h2>
 
-        <Suspense fallback={<Spinner />}>
-          <Reservation cabin={cabin} />
-        </Suspense>
+        <Reservation cabinId={cabin.id} />
       </div>
     </div>
   );

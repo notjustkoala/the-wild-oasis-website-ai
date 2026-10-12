@@ -3,6 +3,8 @@ import Link from "next/link";
 
 import bg from "@/public/bg.png";
 
+export const dynamic = "error";
+
 export default function Page() {
   return (
     <main className="mt-24">

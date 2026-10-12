@@ -208,8 +208,28 @@ client that fails closed when the secret is absent; it never falls back to a
 publishable key.
 
 The root layout uses the committed Geist variable font, so production builds
-do not download Google Fonts. Data-backed cabin pages are rendered dynamically,
-so `next build` does not query Supabase.
+do not download Google Fonts. Home and About are statically generated. Public
+cabin lists and descriptions use one-hour ISR and `generateStaticParams`; builds
+now read public Supabase cabin data and require a working read configuration.
+The catalogue's URL capacity filter runs in the browser without making the
+server page dynamic. New cabin IDs can be generated on demand.
+
+The shared header does not read authentication on the server. A client provider
+fetches only the guest's display name and avatar from `/api/guest/session`, which
+uses private/no-store responses. The reservation region separately reads
+`/api/cabins/:id/availability` with no-store: current prices, capacity, booking
+rules and occupied nights never enter the public ISR cache. Loading failures
+disable reservation entry and offer retry; returning to the tab refreshes both
+reads. Adopting an AI plan still prefills the existing client reservation context.
+The final Server Action revalidates identity, price, capacity, dates and inventory;
+the existing database exclusion constraint remains the concurrency guarantee.
+
+Staff changes to public descriptions/photos/list prices become visible after
+the ISR interval and successful regeneration; live reservation prices and final
+submission do not wait for that cache. Static pages cannot contain user-specific
+names or avatars. See [rendering design and verification](docs/design/2026-10-12-guest-rendering/TECHNICAL_SPEC.md).
+Follow the [manual acceptance steps](docs/design/2026-10-12-guest-rendering/MANUAL_ACCEPTANCE.md)
+after deployment to verify real login, dynamic inventory, AI prefill and final booking.
 
 ## Booking risk Briefing
 
@@ -341,6 +361,7 @@ npm run typecheck
 npm run test
 npm run test:ai
 npm run build
+npm run verify:rendering # asserts actual SSG/ISR output after build
 npm run check
 npm run docs:check
 npm run smoke:production # requires a real GUEST_PRODUCTION_URL

@@ -1,5 +1,8 @@
 import { getBookedDatesByCabinId, getCabin } from "@/app/_lib/data-service";
 
+export const dynamic = "force-dynamic";
+const headers = { "Cache-Control": "no-store" };
+
 export async function GET(request, { params }) {
   const { cabinId } = params;
 
@@ -8,8 +11,8 @@ export async function GET(request, { params }) {
       getCabin(cabinId),
       getBookedDatesByCabinId(cabinId),
     ]);
-    return Response.json({ cabin, bookedDates });
+    return Response.json({ cabin, bookedDates }, { headers });
   } catch {
-    return Response.json({ message: "cabin not found!!!" });
+    return Response.json({ message: "Cabin data is unavailable." }, { status: 503, headers });
   }
 }

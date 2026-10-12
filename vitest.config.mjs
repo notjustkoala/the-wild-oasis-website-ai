@@ -1,7 +1,17 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { transformWithEsbuild } from "vite";
 
 export default defineConfig({
+  plugins: [{
+    name: "next-jsx-in-js",
+    enforce: "pre",
+    transform(source, id) {
+      if (/\/app\/.*\.js$/.test(id)) {
+        return transformWithEsbuild(source, id, { loader: "jsx", jsx: "automatic" });
+      }
+    },
+  }],
   esbuild: { jsx: "automatic" },
   resolve: {
     alias: {

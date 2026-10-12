@@ -9,6 +9,7 @@ import "@/app/_styles/globals.css";
 import Header from "./_components/Header";
 import { ReservationProvider } from "./_components/ReservationContext";
 import ConciergePanel from "./_components/concierge/ConciergePanel";
+import GuestSessionProvider from "./_components/GuestSessionProvider";
 
 export const metadata = {
   title: {
@@ -25,14 +26,16 @@ export default function RootLayout({ children }) {
       <body
         className={`${geist.className} antialiased bg-primary-950 text-primary-100 min-h-screen flex flex-col relative`}
       >
-        <ReservationProvider>
-          <Header />
+        <GuestSessionProvider>
+          <ReservationProvider>
+            <Header />
 
-          <div className="flex-1 min-w-0 px-4 sm:px-8 py-12 grid">
-            <main className="min-w-0 max-w-7xl mx-auto w-full">{children}</main>
-          </div>
-          <ConciergePanel />
-        </ReservationProvider>
+            <div className="flex-1 min-w-0 px-4 sm:px-8 py-12 grid">
+              <main className="min-w-0 max-w-7xl mx-auto w-full">{children}</main>
+            </div>
+            <ConciergePanel />
+          </ReservationProvider>
+        </GuestSessionProvider>
       </body>
     </html>
   );

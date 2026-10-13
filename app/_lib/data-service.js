@@ -1,6 +1,6 @@
 import { eachDayOfInterval, subDays } from "date-fns";
 
-import { supabase } from "./supabase";
+import { supabase, liveSupabase } from "./supabase";
 import { privilegedSupabase } from "./supabase-server";
 import { notFound } from "next/navigation";
 /////////////
@@ -100,12 +100,14 @@ export async function getBookedDatesByCabinId(cabinId) {
   today = today.toISOString();
 
   // Getting all bookings
-  const { data, error } = await supabase
+  const { data, error } = await liveSupabase
     .from("bookings")
     .select("startDate, endDate, status, cabinId")
     .eq("cabinId", cabinId)
     .neq("status", "cancelled")
-    .or(`startDate.gte.${today},status.eq.checked-in`);
+    // Include ongoing stays regardless of status; expired checked-in seed rows
+    // must not remain inventory, and an unconfirmed stay can span today.
+    .gt("endDate", today);
 
   if (error) {
     console.error(error);
@@ -142,7 +144,7 @@ export function getOccupiedDates(bookings) {
 }
 
 export async function getSettings() {
-  const { data, error } = await supabase.from("settings").select("*").single();
+  const { data, error } = await liveSupabase.from("settings").select("*").single();
 
   if (error) {
     console.error(error);

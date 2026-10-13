@@ -18,6 +18,13 @@ export default function DateSelector({ settings, cabin, bookedDates }) {
   const quote = getStayQuote({ startDate: range?.from, endDate: range?.to, regularPrice: cabin.regularPrice, discount: cabin.discount });
 
   useEffect(() => {
+    if (range?.from && !isStayRangeAvailable(range, bookedDates)) {
+      resetRange();
+      setNotice("Your selected dates are no longer available. Please choose another range.");
+    }
+  }, [bookedDates, range, resetRange]);
+
+  useEffect(() => {
     if (draft && draft.cabinId === cabin.id && draft.startDate) {
       const [year, monthNumber, day] = draft.startDate.split("-").map(Number);
       setMonth(startOfMonth(new Date(year, monthNumber - 1, day)));
@@ -40,7 +47,7 @@ export default function DateSelector({ settings, cabin, bookedDates }) {
       const nights = differenceInCalendarDays(day, range.from);
       return nights < min || nights > max || !isStayRangeAvailable({ from: range.from, to: day }, bookedDates);
     }
-    return false;
+    return bookedDates.some(date => startOfDay(date).getTime() === startOfDay(day).getTime());
   }
 
   function handleSelect(nextRange, clickedDay) {
@@ -70,7 +77,7 @@ export default function DateSelector({ settings, cabin, bookedDates }) {
         selected={range} onSelect={handleSelect} min={min} max={max}
         startMonth={startOfMonth(today)} endMonth={startOfMonth(addYears(today, 5))}
         captionLayout="dropdown" navLayout="after" numberOfMonths={months} showOutsideDays={false}
-        disabled={disabled} modifiers={{ occupied: bookedDates }}
+        disabled={disabled} modifiers={{ occupied: day => disabled(day) && bookedDates.some(date => startOfDay(date).getTime() === startOfDay(day).getTime()) }}
         modifiersClassNames={{ occupied: "booking-occupied" }}
         footer={range?.from && range?.to ? `${quote.numNights} nights selected` : range?.from ? "Now choose your check-out date" : "Choose your check-in date"} />
     </div>

@@ -220,7 +220,13 @@ uses private/no-store responses. The reservation region separately reads
 `/api/cabins/:id/availability` with no-store: current prices, capacity, booking
 rules and occupied nights never enter the public ISR cache. Loading failures
 disable reservation entry and offer retry; returning to the tab refreshes both
-reads. Adopting an AI plan still prefills the existing client reservation context.
+reads. The calendar also has an explicit Refresh availability button. Initial
+loading and refresh show rotating indicators; refreshing keeps the viewed month
+and disables submission until the new inventory arrives. Booked nights cannot
+be selected as a new arrival, while valid half-open checkout boundaries remain
+selectable. Supabase live reads explicitly bypass upstream caches through a
+separate client so public ISR presentation remains static. Adopting an AI plan
+still prefills the existing client reservation context.
 The final Server Action revalidates identity, price, capacity, dates and inventory;
 the existing database exclusion constraint remains the concurrency guarantee.
 

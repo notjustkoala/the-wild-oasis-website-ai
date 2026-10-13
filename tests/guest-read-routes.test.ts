@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), from: vi.fn(), settings: vi.fn(), dates: vi.fn() }));
 vi.mock("@/app/_lib/auth", () => ({ auth: mocks.auth }));
-vi.mock("@/app/_lib/supabase", () => ({ supabase: { from: mocks.from } }));
+vi.mock("@/app/_lib/supabase", () => ({ liveSupabase: { from: mocks.from } }));
 vi.mock("@/app/_lib/data-service", () => ({ getSettings: mocks.settings, getBookedDatesByCabinId: mocks.dates }));
 import { GET as sessionGET } from "@/app/api/guest/session/route";
 import { GET as availabilityGET } from "@/app/api/cabins/[cabinId]/availability/route";

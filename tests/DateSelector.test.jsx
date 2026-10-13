@@ -52,8 +52,9 @@ describe("DateSelector booking boundaries", () => {
       />
     );
 
-    expect(calendar.props.modifiers.occupied).toEqual(occupiedNights);
-    expect(calendar.props.disabled(date(10))).toBe(false);
+    expect(calendar.props.modifiers.occupied(date(10))).toBe(true);
+    expect(calendar.props.disabled(date(10))).toBe(true);
+    expect(calendar.props.disabled(date(13))).toBe(false);
 
     act(() => calendar.props.onSelect({ from: date(7), to: date(10) }));
     expect(reservation.setRange).toHaveBeenLastCalledWith({

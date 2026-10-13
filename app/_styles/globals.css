@@ -80,6 +80,7 @@
 .booking-calendar .rdp-button_next, .booking-calendar .rdp-button_previous { border: 1px solid #4c6176; border-radius: .5rem; }
 .booking-calendar .rdp-footer { margin-top: .9rem; font-size: .8rem; color: #b7c6d6; }
 .booking-calendar .booking-occupied { text-decoration: line-through; color: #748799; }
+.booking-calendar .booking-occupied .rdp-day_button { text-decoration: line-through; color: #748799; background: #233140; }
 .ai-answer > * + * { margin-top: .7rem; }
 .ai-answer > :first-child { margin-top: 0; }
 .ai-answer > :last-child { margin-bottom: 0; }

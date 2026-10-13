@@ -1,9 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 
 let client;
+let liveClient;
 
-function getClient() {
-  if (client) return client;
+function getClient(fresh = false) {
+  const existing = fresh ? liveClient : client;
+  if (existing) return existing;
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey =
@@ -15,8 +17,15 @@ function getClient() {
     );
   }
 
-  client = createClient(supabaseUrl, supabaseKey);
-  return client;
+  const created = createClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    // Keep the ISR reader in Next's cache context; live reads override upstream
+    // caching explicitly without making static presentation dynamic.
+    ...(fresh ? { global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) } } : {}),
+  });
+  if (fresh) liveClient = created;
+  else client = created;
+  return created;
 }
 
 export const supabase = {
@@ -25,5 +34,11 @@ export const supabase = {
   },
   rpc(...args) {
     return getClient().rpc(...args);
+  },
+};
+
+export const liveSupabase = {
+  from(...args) {
+    return getClient(true).from(...args);
   },
 };

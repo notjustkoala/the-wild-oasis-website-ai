@@ -1,4 +1,4 @@
-import { supabase } from "@/app/_lib/supabase";
+import { liveSupabase } from "@/app/_lib/supabase";
 import { getBookedDatesByCabinId, getSettings } from "@/app/_lib/data-service";
 import { reservationAvailabilitySchema } from "@/app/_lib/guest-read-schema";
 import { toDateOnly } from "@/app/_lib/booking-domain";
@@ -12,7 +12,7 @@ export async function GET(_request: Request, { params }: { params: { cabinId: st
     return Response.json({ error: "Invalid cabin ID." }, { status: 400, headers });
   }
   try {
-    const { data: cabin, error } = await supabase.from("cabins")
+    const { data: cabin, error } = await liveSupabase.from("cabins")
       .select("id, maxCapacity, regularPrice, discount").eq("id", cabinId).maybeSingle();
     if (error) throw new Error("Unavailable");
     if (!cabin) return Response.json({ error: "Cabin not found." }, { status: 404, headers });
